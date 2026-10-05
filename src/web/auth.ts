@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { Router, type Request } from "express";
 import qrcode from "qrcode-generator";
 import type { Ctx } from "../lib/context.ts";
@@ -19,13 +21,29 @@ interface Gebruiker {
 
 let setupToken: string | null = null;
 
-/** Bij de eerste start (geen gebruikers) wordt een eenmalig setup-token in de log getoond. */
+const setupTokenPad = (ctx: Ctx) => path.join(ctx.config.dataDir, "setup-token");
+
+/**
+ * Zolang er geen gebruiker is, geldt een setup-token. Het staat in de log én in DATA_DIR/setup-token
+ * (te lezen via File Station) en blijft gelijk na een herstart. Na het aanmaken van de gebruiker vervalt het.
+ */
 export function initSetup(ctx: Ctx): void {
   const n = ctx.db.get<{ n: number }>("SELECT COUNT(*) AS n FROM gebruikers")!.n;
-  if (n === 0) {
-    setupToken = willekeurigToken(12);
-    ctx.log.warn(`Nog geen gebruiker. Open /setup en gebruik dit eenmalige setup-token: ${setupToken}`);
+  if (n > 0) {
+    fs.rmSync(setupTokenPad(ctx), { force: true });
+    return;
   }
+  try {
+    const bestaand = fs.readFileSync(setupTokenPad(ctx), "utf8").trim();
+    if (/^[\w-]{12,64}$/.test(bestaand)) setupToken = bestaand;
+  } catch {
+    // nog geen token
+  }
+  if (!setupToken) {
+    setupToken = willekeurigToken(12);
+    fs.writeFileSync(setupTokenPad(ctx), `${setupToken}\n`, { mode: 0o600 });
+  }
+  ctx.log.warn(`Nog geen gebruiker. Open /setup en gebruik dit setup-token: ${setupToken} (staat ook in het bestand data/setup-token)`);
 }
 
 function ip(req: Request): string {
@@ -72,6 +90,7 @@ export function authRouter(ctx: Ctx): Router {
     const id = ctx.db.run("INSERT INTO gebruikers (gebruikersnaam, wachtwoord_hash) VALUES (?, ?)", [gebruikersnaam, hashWachtwoord(wachtwoord)]).id;
     audit(ctx.db, gebruikersnaam, "gebruiker_aangemaakt", "gebruikers", id);
     setupToken = null;
+    fs.rmSync(setupTokenPad(ctx), { force: true });
     nieuweSessie(ctx, req, res, id, "2fa");
     res.redirect("/login/2fa-instellen");
   });

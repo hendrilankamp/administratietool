@@ -1,7 +1,7 @@
 <%- include('../partials/kop') %>
 <div class="paneel">
   <h1>Eerste gebruiker aanmaken</h1>
-  <p class="hulp">Het eenmalige setup-token staat in de log van de app/container (Container Manager → container → Log).</p>
+  <p class="hulp">Het setup-token staat in de log van de container (Container Manager → Container → boekhouding → Log) en in het bestand <code>data/setup-token</code> in je projectmap (File Station).</p>
   <form method="post" action="/setup">
     <%- include('../partials/csrf') %>
     <div class="veld"><label for="t">Setup-token</label><input id="t" name="token" required autocomplete="off"></div>
