@@ -64,3 +64,14 @@ test("instellingen: versleuteld opgeslagen, gaan vóór op omgeving, wissen valt
     ctx.opruimen();
   }
 });
+
+test("Microsoft-ID's: geldige GUID wordt geaccepteerd, typfout (O i.p.v. 0) geweigerd", async () => {
+  const ctx = await testCtx();
+  try {
+    slaInstellingenOp(ctx, [{ sleutel: "MS_CLIENT_ID", waarde: "6496e63c-96ca-4862-a664-0fd54b21e9fe" }, { sleutel: "MS_TENANT_ID", waarde: "74bb824f-1d13-4c03-a29d-f28ae1d7c42d" }], "t");
+    assert.equal(ctx.config.MS_CLIENT_ID, "6496e63c-96ca-4862-a664-0fd54b21e9fe");
+    assert.throws(() => slaInstellingenOp(ctx, [{ sleutel: "MS_CLIENT_ID", waarde: "6496e63c-96ca-4862-a664-Ofd54b21e9fe" }], "t"), /GUID/);
+  } finally {
+    ctx.opruimen();
+  }
+});

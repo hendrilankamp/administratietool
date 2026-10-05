@@ -28,7 +28,12 @@ export function koppelingenRoutes(ctx: Ctx, r: Router): void {
     const veld = (k: InstelSleutel, soort: "tekst" | "getal" | "vinkje" = "tekst") => {
       if (b[`wis_${k}`] === "1") return wijzigingen.push({ sleutel: k, waarde: null });
       if (soort === "vinkje") return wijzigingen.push({ sleutel: k, waarde: b[k] === "1" });
-      const t = tekst(b[k], 500);
+      let t = tekst(b[k], 500);
+      // Bij kopiëren uit portals komen soms onzichtbare tekens of labels mee: haal er de GUID uit
+      if (t && (k === "MS_CLIENT_ID" || k === "MS_TENANT_ID")) {
+        const schoon = t.replace(/[\s\u00a0\u200b-\u200f\u2060\ufeff]/g, "");
+        t = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.exec(schoon)?.[0].toLowerCase() ?? schoon;
+      }
       // Geheimen: leeg laten = ongewijzigd. Overige velden: leeg = terug naar standaard.
       if (t === null) return wijzigingen.push({ sleutel: k, waarde: INSTELBAAR[k].geheim ? undefined : null });
       wijzigingen.push({ sleutel: k, waarde: soort === "getal" ? Number(t) : t });
