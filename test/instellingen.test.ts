@@ -90,3 +90,9 @@ test("gedeelde mailbox: Graph-pad wisselt van /me naar /users/<mailbox>", async 
     ctx.opruimen();
   }
 });
+
+test("Microsoft-foutmeldingen krijgen een uitleg", async () => {
+  const { microsoftFout } = await import("../src/integrations/outlook/index.ts");
+  assert.match(microsoftFout(new Error("post_request_failed: invalid_client")), /Allow public client flows/);
+  assert.match(microsoftFout({ message: "x", errorMessage: "AADSTS700016: Application not found" }), /Toepassings-ID bestaat niet/);
+});

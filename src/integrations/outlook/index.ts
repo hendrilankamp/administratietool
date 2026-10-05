@@ -103,11 +103,29 @@ export async function startKoppelen(ctx: Ctx, gebruiker: string): Promise<Koppel
         ctx.log.info(`Outlook gekoppeld: ${res?.account?.username}`);
       })
       .catch((e: Error) => {
-        lopendeLogin = { status: "fout", melding: e.message };
+        const melding = microsoftFout(e);
+        ctx.log.error(`Outlook koppelen mislukt: ${melding}`);
+        lopendeLogin = { status: "fout", melding };
         setTimeout(() => (lopendeLogin = null), 60_000);
         if (!opgelost) resolve(lopendeLogin);
       });
   });
+}
+
+/** Maakt een MSAL-fout leesbaar, inclusief AADSTS-code en een Nederlandse uitleg voor bekende gevallen. */
+export function microsoftFout(e: unknown): string {
+  const f = e as { message?: string; errorCode?: string; errorMessage?: string; subError?: string };
+  const tekst = [f.message, f.errorMessage, f.subError].filter(Boolean).join(" | ");
+  const code = /AADSTS\d+/.exec(tekst)?.[0];
+  const uitleg: Record<string, string> = {
+    AADSTS7000218: "Zet in Entra bij de app → Authentication → 'Allow public client flows' op Yes en sla op.",
+    AADSTS700016: "De Toepassings-ID bestaat niet in deze tenant: controleer Toepassings-ID en Map-ID.",
+    AADSTS90002: "De Map-ID (tenant) bestaat niet: controleer de Map-ID.",
+    AADSTS65001: "Toestemming ontbreekt: geef in Entra → API permissions 'Grant admin consent'.",
+    AADSTS50020: "Dit account hoort niet bij deze organisatie: log in met een account van je eigen Microsoft 365.",
+  };
+  const hint = code ? uitleg[code] : /invalid_client/.test(tekst) ? uitleg.AADSTS7000218 : undefined;
+  return `${tekst.slice(0, 600)}${hint ? ` → ${hint}` : ""}`;
 }
 
 export async function ontkoppel(ctx: Ctx, gebruiker: string): Promise<void> {
