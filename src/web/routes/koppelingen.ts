@@ -47,6 +47,7 @@ export function koppelingenRoutes(ctx: Ctx, r: Router): void {
     } else if (sectie === "outlook") {
       veld("MS_CLIENT_ID");
       veld("MS_TENANT_ID");
+    } else if (sectie === "mailbox") {
       veld("MS_MAILBOX");
       veld("MS_MAP");
       veld("MS_MAP_VERWERKT");
@@ -57,7 +58,7 @@ export function koppelingenRoutes(ctx: Ctx, r: Router): void {
       veld("BACKUP_UUR", "getal");
     } else throw new GebruikersFout("Onbekend onderdeel");
     slaInstellingenOp(ctx, wijzigingen, gebruiker(req));
-    klaar(ctx, req, res, `/instellingen#${sectie}`, "Instellingen opgeslagen.");
+    klaar(ctx, req, res, `/instellingen#${sectie === "mailbox" ? "outlook" : sectie}`, "Instellingen opgeslagen.");
   });
 
   r.post("/test/mollie", async (req, res) => {

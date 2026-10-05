@@ -50,19 +50,26 @@
         <div><label>Toepassings-ID (client)</label><input name="MS_CLIENT_ID" value="<%= k.MS_CLIENT_ID.waarde || '' %>" placeholder="00000000-0000-0000-0000-000000000000"></div>
         <div><label>Map-ID (tenant)</label><input name="MS_TENANT_ID" value="<%= k.MS_TENANT_ID.waarde || '' %>" placeholder="00000000-0000-0000-0000-000000000000"></div>
       </div>
-      <div class="veld mt1"><label>Gedeelde mailbox (optioneel)</label><input name="MS_MAILBOX" type="email" value="<%= k.MS_MAILBOX.waarde || '' %>" placeholder="facturen@medialan.nl – leeg = mailbox van het account waarmee je koppelt"></div>
-      <div class="rij mt1">
-        <div><label>Map met facturen</label><input name="MS_MAP" value="<%= k.MS_MAP.waarde %>"></div>
-        <div><label>Submap voor verwerkte mail</label><input name="MS_MAP_VERWERKT" value="<%= k.MS_MAP_VERWERKT.waarde %>"></div>
-        <div class="smal"><label>Elke … minuten</label><input type="number" name="MS_POLL_MINUTEN" min="5" max="1440" value="<%= k.MS_POLL_MINUTEN.waarde %>"></div>
-        <div class="smal"><button class="primair" type="submit">Opslaan</button></div>
-      </div>
+      <div class="acties"><button class="primair" type="submit">Opslaan</button></div>
     </form>
   </details>
+
+  <form method="post" action="/instellingen/koppelingen" class="mt1">
+    <%- include('partials/csrf') %><input type="hidden" name="sectie" value="mailbox">
+    <h3 class="mb0">Welke mailbox?</h3>
+    <p class="hulp">Leeg = de mailbox van het account waarmee je koppelt. Komen facturen binnen in een <strong>gedeelde mailbox</strong> (bv. facturen@medialan.nl), vul die hier in; het gekoppelde account heeft dan “Volledige toegang” op die mailbox nodig.</p>
+    <div class="rij">
+      <div><label>Gedeelde mailbox (optioneel)</label><input name="MS_MAILBOX" type="email" value="<%= k.MS_MAILBOX.waarde || '' %>" placeholder="facturen@medialan.nl"></div>
+      <div><label>Map met facturen</label><input name="MS_MAP" value="<%= k.MS_MAP.waarde %>"></div>
+      <div><label>Submap voor verwerkte mail</label><input name="MS_MAP_VERWERKT" value="<%= k.MS_MAP_VERWERKT.waarde %>"></div>
+      <div class="smal"><label>Elke … minuten</label><input type="number" name="MS_POLL_MINUTEN" min="5" max="1440" value="<%= k.MS_POLL_MINUTEN.waarde %>"></div>
+      <div class="smal"><button class="primair" type="submit">Opslaan</button></div>
+    </div>
+  </form>
   <% if (outlook.status === 'niet_ingesteld') { %>
     <p class="hulp">Vul eerst de app-registratie in.</p>
   <% } else if (outlook.status === 'gekoppeld') { %>
-    <p>Gekoppeld als <strong><%= outlook.account %></strong><%= config.mailbox ? ' – leest de gedeelde mailbox ' + config.mailbox : '' %>. Map <strong><%= config.map %></strong> wordt elke <%= config.poll %> minuten gecontroleerd; verwerkte e-mails gaan naar <strong><%= config.map %>/<%= config.verwerkt %></strong>.</p>
+    <p>Gekoppeld als <strong><%= outlook.account %></strong> · leest <strong><%= config.mailbox || 'de eigen mailbox van dit account' %></strong>. Map <strong><%= config.map %></strong> wordt elke <%= config.poll %> minuten gecontroleerd; verwerkte e-mails gaan naar <strong><%= config.map %>/<%= config.verwerkt %></strong>.</p>
     <form method="post" action="/instellingen/outlook/ontkoppelen" data-bevestig="Outlook ontkoppelen?"><%- include('partials/csrf') %><button class="gevaar" type="submit">Ontkoppelen</button></form>
   <% } else if (outlook.status === 'wachten_op_login') { %>
     <span data-vernieuw="5"></span>
