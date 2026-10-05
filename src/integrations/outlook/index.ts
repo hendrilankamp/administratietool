@@ -7,7 +7,8 @@ import { ontsleutel, versleutel } from "../../lib/crypto.ts";
 import { bewaarBijlage, detecteerType, MAX_BIJLAGE } from "../../lib/bijlagen.ts";
 import { nieuweInkoopfactuur } from "../../modules/facturen/service.ts";
 
-const SCOPES = ["Mail.ReadWrite", "offline_access"];
+// Mail.ReadWrite.Shared: nodig om een gedeelde mailbox te lezen waar de ingelogde gebruiker toegang toe heeft
+const SCOPES = ["Mail.ReadWrite", "Mail.ReadWrite.Shared", "offline_access"];
 const GRAPH = "https://graph.microsoft.com/v1.0";
 
 export interface KoppelStatus {
@@ -136,7 +137,13 @@ async function graph<T>(ctx: Ctx, pad: string, init: RequestInit = {}, poging = 
     await new Promise((r) => setTimeout(r, Math.min(wacht, 60_000)));
     return graph<T>(ctx, pad, init, poging + 1);
   }
-  if (!res.ok) throw new Error(`Microsoft Graph ${res.status}: ${(await res.text()).slice(0, 300)}`);
+  if (!res.ok) {
+    const tekst = (await res.text()).slice(0, 300);
+    if ((res.status === 403 || res.status === 404) && ctx.config.MS_MAILBOX) {
+      throw new GebruikersFout(`Geen toegang tot de gedeelde mailbox ${ctx.config.MS_MAILBOX} (${res.status}). Geef je account "Volledige toegang" op die mailbox in het Exchange-beheercentrum en koppel Outlook opnieuw.`, 502);
+    }
+    throw new Error(`Microsoft Graph ${res.status}: ${tekst}`);
+  }
   if (res.status === 204) return undefined as T;
   const type = res.headers.get("content-type") ?? "";
   return (type.includes("application/json") ? await res.json() : Buffer.from(await res.arrayBuffer())) as T;
@@ -147,11 +154,16 @@ interface Map_ {
   displayName: string;
 }
 
+/** Graph-pad van de mailbox: een gedeelde mailbox (MS_MAILBOX) of de eigen mailbox van de ingelogde gebruiker. */
+export function mailbox(ctx: Ctx): string {
+  return ctx.config.MS_MAILBOX ? `/users/${encodeURIComponent(ctx.config.MS_MAILBOX)}` : "/me";
+}
+
 const odataString = (s: string) => `'${s.replace(/'/g, "''")}'`;
 
 async function zoekMap(ctx: Ctx, naam: string, ouderId?: string): Promise<Map_ | undefined> {
   const filter = `?$filter=displayName eq ${encodeURIComponent(odataString(naam))}`;
-  const pad = ouderId ? `/me/mailFolders/${ouderId}/childFolders${filter}` : `/me/mailFolders${filter}`;
+  const pad = ouderId ? `${mailbox(ctx)}/mailFolders/${ouderId}/childFolders${filter}` : `${mailbox(ctx)}/mailFolders${filter}`;
   const r = await graph<{ value: Map_[] }>(ctx, pad);
   return r.value[0];
 }
@@ -159,7 +171,7 @@ async function zoekMap(ctx: Ctx, naam: string, ouderId?: string): Promise<Map_ |
 async function bronMap(ctx: Ctx): Promise<Map_> {
   const naam = ctx.config.MS_MAP;
   const m = (await zoekMap(ctx, naam)) ?? (await zoekMap(ctx, naam, "inbox"));
-  if (!m) throw new GebruikersFout(`Map "${naam}" niet gevonden in Outlook. Maak deze map aan (bovenaan of onder Postvak IN).`);
+  if (!m) throw new GebruikersFout(`Map "${naam}" niet gevonden in ${ctx.config.MS_MAILBOX ?? "je mailbox"}. Maak deze map aan (bovenaan of onder Postvak IN).`);
   return m;
 }
 
@@ -167,7 +179,7 @@ async function verwerktMap(ctx: Ctx, ouder: Map_): Promise<Map_> {
   const naam = ctx.config.MS_MAP_VERWERKT;
   const m = await zoekMap(ctx, naam, ouder.id);
   if (m) return m;
-  return graph<Map_>(ctx, `/me/mailFolders/${ouder.id}/childFolders`, { method: "POST", body: JSON.stringify({ displayName: naam }) });
+  return graph<Map_>(ctx, `${mailbox(ctx)}/mailFolders/${ouder.id}/childFolders`, { method: "POST", body: JSON.stringify({ displayName: naam }) });
 }
 
 interface Bericht {
@@ -206,16 +218,16 @@ export async function verwerkMailbox(ctx: Ctx): Promise<MailResultaat> {
   const doel = await verwerktMap(ctx, bron);
   const res: MailResultaat = { berichten: 0, facturen: 0, zonderBijlage: 0 };
   let volgende: string | undefined =
-    `/me/mailFolders/${bron.id}/messages?$select=id,subject,from,receivedDateTime,internetMessageId,hasAttachments&$orderby=receivedDateTime asc&$top=25`;
+    `${mailbox(ctx)}/mailFolders/${bron.id}/messages?$select=id,subject,from,receivedDateTime,internetMessageId,hasAttachments&$orderby=receivedDateTime asc&$top=25`;
   let rondes = 0;
   while (volgende && rondes++ < 20) {
     const pagina: { value: Bericht[]; "@odata.nextLink"?: string } = await graph(ctx, volgende);
     for (const b of pagina.value) {
       await verwerkBericht(ctx, b, res);
-      await graph(ctx, `/me/messages/${b.id}/move`, { method: "POST", body: JSON.stringify({ destinationId: doel.id }) });
+      await graph(ctx, `${mailbox(ctx)}/messages/${b.id}/move`, { method: "POST", body: JSON.stringify({ destinationId: doel.id }) });
     }
     // Na het verplaatsen schuift de lijst op; begin opnieuw zolang er berichten waren.
-    volgende = pagina.value.length > 0 ? `/me/mailFolders/${bron.id}/messages?$select=id,subject,from,receivedDateTime,internetMessageId,hasAttachments&$orderby=receivedDateTime asc&$top=25` : undefined;
+    volgende = pagina.value.length > 0 ? `${mailbox(ctx)}/mailFolders/${bron.id}/messages?$select=id,subject,from,receivedDateTime,internetMessageId,hasAttachments&$orderby=receivedDateTime asc&$top=25` : undefined;
   }
   return res;
 }
@@ -233,7 +245,7 @@ async function verwerkBericht(ctx: Ctx, b: Bericht, res: MailResultaat): Promise
   let aantal = 0;
   const fouten: string[] = [];
   if (b.hasAttachments) {
-    const lijst = await graph<{ value: Bijlage[] }>(ctx, `/me/messages/${b.id}/attachments?$select=id,name,contentType,size,isInline`);
+    const lijst = await graph<{ value: Bijlage[] }>(ctx, `${mailbox(ctx)}/messages/${b.id}/attachments?$select=id,name,contentType,size,isInline`);
     for (const a of lijst.value) {
       if (a["@odata.type"] !== "#microsoft.graph.fileAttachment" || a.isInline) continue;
       if (a.size > MAX_BIJLAGE + 64 * 1024) {
@@ -243,7 +255,7 @@ async function verwerkBericht(ctx: Ctx, b: Bericht, res: MailResultaat): Promise
       const isPdf = /pdf/i.test(a.contentType) || /\.pdf$/i.test(a.name);
       const isAfb = /image\/(png|jpe?g)/i.test(a.contentType);
       if (!isPdf && !(isAfb && a.size >= MIN_AFBEELDING)) continue;
-      const data = await graph<Buffer>(ctx, `/me/messages/${b.id}/attachments/${a.id}/$value`);
+      const data = await graph<Buffer>(ctx, `${mailbox(ctx)}/messages/${b.id}/attachments/${a.id}/$value`);
       if (!detecteerType(data)) {
         fouten.push(`${a.name}: geen geldige PDF/afbeelding`);
         continue;

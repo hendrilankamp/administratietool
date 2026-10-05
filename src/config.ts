@@ -46,6 +46,7 @@ const schema = z.object({
   // Microsoft 365 / Outlook
   MS_CLIENT_ID: optioneel,
   MS_TENANT_ID: optioneel,
+  MS_MAILBOX: optioneel,
   MS_MAP: z.string().default("Facturen"),
   MS_MAP_VERWERKT: z.string().default("Verwerkt"),
   MS_POLL_MINUTEN: z.coerce.number().int().min(5).max(24 * 60).default(15),

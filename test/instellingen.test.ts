@@ -75,3 +75,18 @@ test("Microsoft-ID's: geldige GUID wordt geaccepteerd, typfout (O i.p.v. 0) gewe
     ctx.opruimen();
   }
 });
+
+test("gedeelde mailbox: Graph-pad wisselt van /me naar /users/<mailbox>", async () => {
+  const { mailbox } = await import("../src/integrations/outlook/index.ts");
+  const ctx = await testCtx();
+  try {
+    assert.equal(mailbox(ctx), "/me");
+    slaInstellingenOp(ctx, [{ sleutel: "MS_MAILBOX", waarde: "facturen@medialan.nl" }], "t");
+    assert.equal(mailbox(ctx), "/users/facturen%40medialan.nl");
+    assert.throws(() => slaInstellingenOp(ctx, [{ sleutel: "MS_MAILBOX", waarde: "geen-adres" }], "t"), /e-mailadres/);
+    slaInstellingenOp(ctx, [{ sleutel: "MS_MAILBOX", waarde: null }], "t");
+    assert.equal(mailbox(ctx), "/me");
+  } finally {
+    ctx.opruimen();
+  }
+});

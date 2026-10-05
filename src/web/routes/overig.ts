@@ -153,7 +153,7 @@ export function instellingenRouter(ctx: Ctx, diensten: Diensten): Router {
       herstel: herstelKlaargezet(ctx.config),
       categorieen: categorieen(ctx, false),
       taken: alleTaakStatussen(ctx),
-      config: { map: ctx.config.MS_MAP, verwerkt: ctx.config.MS_MAP_VERWERKT, poll: ctx.config.MS_POLL_MINUTEN, backupUur: ctx.config.BACKUP_UUR },
+      config: { mailbox: ctx.config.MS_MAILBOX, map: ctx.config.MS_MAP, verwerkt: ctx.config.MS_MAP_VERWERKT, poll: ctx.config.MS_POLL_MINUTEN, backupUur: ctx.config.BACKUP_UUR },
       k: koppelingInfo(ctx),
       appSecretAutomatisch: ctx.config.appSecretAutomatisch,
     });

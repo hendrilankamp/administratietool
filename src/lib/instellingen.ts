@@ -14,6 +14,7 @@ export const INSTELBAAR = {
   MOLLIE_TESTMODE: { geheim: false, schema: z.boolean() },
   MS_CLIENT_ID: { geheim: false, schema: z.guid("Toepassings-ID moet een GUID zijn (8-4-4-4-12 tekens, bv. 6496e63c-96ca-4862-a664-0fd54b21e9fe)") },
   MS_TENANT_ID: { geheim: false, schema: z.union([z.guid(), z.string().regex(/^[\w.-]+\.[a-z]{2,}$/)], { error: "Map-ID moet een GUID (8-4-4-4-12 tekens) of domeinnaam zijn" }) },
+  MS_MAILBOX: { geheim: false, schema: z.email("Vul het e-mailadres van de gedeelde mailbox in").max(200) },
   MS_MAP: { geheim: false, schema: z.string().trim().min(1).max(100) },
   MS_MAP_VERWERKT: { geheim: false, schema: z.string().trim().min(1).max(100) },
   MS_POLL_MINUTEN: { geheim: false, schema: z.number().int().min(5).max(24 * 60) },

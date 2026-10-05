@@ -46,7 +46,7 @@ Geef de Synology eenmalig leestoegang tot het (privé) image:
    - **Backupbeveiliging**: klik *Sleutelpaar maken* en bewaar de getoonde geheime sleutel in je wachtwoordmanager. Klik ook *Herstelsleutel tonen* en bewaar die.
    - **Mollie**: Organization access token met `sales-invoices.read` en `settlements.read`.
    - **AI-uitlezen**: Anthropic API-sleutel.
-   - **Outlook**: volg de stappen op de pagina (app-registratie in Microsoft Entra), en klik daarna *Outlook koppelen*.
+   - **Outlook**: volg de stappen op de pagina (app-registratie in Microsoft Entra, met *Allow public client flows* op **Yes**), en klik daarna *Outlook koppelen*. Je logt in met je **eigen** account. Komen de facturen binnen in een **gedeelde mailbox** (bv. `facturen@medialan.nl`), vul die dan in bij *Gedeelde mailbox* en geef je account in het Exchange-beheercentrum "Volledige toegang" (Lezen en beheren) op die mailbox.
 6. **Hyper Backup**: maak een taak voor de map `docker/boekhoud/backup` naar Synology C2, een USB-schijf of een tweede NAS (of gebruik **Cloud Sync** naar OneDrive). De bestanden daarin zijn al versleuteld.
 
 De container zet bij het opstarten zelf de rechten van beide submappen goed (je hoeft geen rechten in te stellen) en draait daarna als gewone gebruiker (niet als root).

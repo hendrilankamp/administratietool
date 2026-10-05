@@ -47,6 +47,7 @@ export function koppelingenRoutes(ctx: Ctx, r: Router): void {
     } else if (sectie === "outlook") {
       veld("MS_CLIENT_ID");
       veld("MS_TENANT_ID");
+      veld("MS_MAILBOX");
       veld("MS_MAP");
       veld("MS_MAP_VERWERKT");
       veld("MS_POLL_MINUTEN", "getal");

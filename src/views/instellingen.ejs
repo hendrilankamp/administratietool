@@ -40,7 +40,8 @@
     <ol class="klein">
       <li><a href="https://entra.microsoft.com" target="_blank" rel="noopener">entra.microsoft.com</a> → App-registraties → <strong>Nieuwe registratie</strong>: naam “Boekhouding Medialan”, alleen accounts in deze organisatie, geen omleidings-URI.</li>
       <li><strong>Verificatie</strong> → “Openbare clientstromen toestaan” op <strong>Ja</strong>.</li>
-      <li><strong>API-machtigingen</strong> → Microsoft Graph → Gedelegeerd: <code>Mail.ReadWrite</code> en <code>offline_access</code>.</li>
+      <li><strong>API-machtigingen</strong> → Microsoft Graph → Gedelegeerd: <code>Mail.ReadWrite</code>, <code>Mail.ReadWrite.Shared</code> en <code>offline_access</code> → <em>Grant admin consent</em>.</li>
+      <li>Gedeelde mailbox (bv. facturen@)? Geef in het <a href="https://admin.exchange.microsoft.com" target="_blank" rel="noopener">Exchange-beheercentrum</a> → Postvakken → de gedeelde mailbox → Delegatie → <strong>Lezen en beheren (Volledige toegang)</strong> aan het account waarmee je koppelt.</li>
       <li>Kopieer de <strong>Toepassings-ID (client)</strong> en <strong>Map-ID (tenant)</strong> hieronder.</li>
     </ol>
     <form method="post" action="/instellingen/koppelingen">
@@ -49,6 +50,7 @@
         <div><label>Toepassings-ID (client)</label><input name="MS_CLIENT_ID" value="<%= k.MS_CLIENT_ID.waarde || '' %>" placeholder="00000000-0000-0000-0000-000000000000"></div>
         <div><label>Map-ID (tenant)</label><input name="MS_TENANT_ID" value="<%= k.MS_TENANT_ID.waarde || '' %>" placeholder="00000000-0000-0000-0000-000000000000"></div>
       </div>
+      <div class="veld mt1"><label>Gedeelde mailbox (optioneel)</label><input name="MS_MAILBOX" type="email" value="<%= k.MS_MAILBOX.waarde || '' %>" placeholder="facturen@medialan.nl – leeg = mailbox van het account waarmee je koppelt"></div>
       <div class="rij mt1">
         <div><label>Map met facturen</label><input name="MS_MAP" value="<%= k.MS_MAP.waarde %>"></div>
         <div><label>Submap voor verwerkte mail</label><input name="MS_MAP_VERWERKT" value="<%= k.MS_MAP_VERWERKT.waarde %>"></div>
@@ -60,14 +62,14 @@
   <% if (outlook.status === 'niet_ingesteld') { %>
     <p class="hulp">Vul eerst de app-registratie in.</p>
   <% } else if (outlook.status === 'gekoppeld') { %>
-    <p>Gekoppeld als <strong><%= outlook.account %></strong>. Map <strong><%= config.map %></strong> wordt elke <%= config.poll %> minuten gecontroleerd; verwerkte e-mails gaan naar <strong><%= config.map %>/<%= config.verwerkt %></strong>.</p>
+    <p>Gekoppeld als <strong><%= outlook.account %></strong><%= config.mailbox ? ' – leest de gedeelde mailbox ' + config.mailbox : '' %>. Map <strong><%= config.map %></strong> wordt elke <%= config.poll %> minuten gecontroleerd; verwerkte e-mails gaan naar <strong><%= config.map %>/<%= config.verwerkt %></strong>.</p>
     <form method="post" action="/instellingen/outlook/ontkoppelen" data-bevestig="Outlook ontkoppelen?"><%- include('partials/csrf') %><button class="gevaar" type="submit">Ontkoppelen</button></form>
   <% } else if (outlook.status === 'wachten_op_login') { %>
     <span data-vernieuw="5"></span>
     <div class="melding info">Ga naar <a href="<%= outlook.verificatieUrl %>" target="_blank" rel="noopener"><strong><%= outlook.verificatieUrl %></strong></a> en voer deze code in: <strong class="mono"><%= outlook.gebruikerscode %></strong><br><span class="hulp">Geldig tot <%= nlTijdstip(outlook.verlooptOp) %>. Deze pagina vernieuwt automatisch.</span></div>
   <% } else { %>
     <% if (outlook.status === 'fout') { %><div class="melding fout"><%= outlook.melding %></div><% } %>
-    <form method="post" action="/instellingen/outlook/koppelen" class="acties"><%- include('partials/csrf') %><button class="primair" type="submit">Outlook koppelen</button><span class="hulp">Maak in Outlook een map “<%= config.map %>” aan (bovenaan of onder Postvak IN).</span></form>
+    <form method="post" action="/instellingen/outlook/koppelen" class="acties"><%- include('partials/csrf') %><button class="primair" type="submit">Outlook koppelen</button><span class="hulp">Log in met je eigen account<%= config.mailbox ? ' (met toegang tot ' + config.mailbox + ')' : '' %>. Maak in <%= config.mailbox || 'die mailbox' %> een map “<%= config.map %>” aan (bovenaan of onder Postvak IN).</span></form>
   <% } %>
 </div>
 
