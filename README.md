@@ -33,22 +33,23 @@ Geef de Synology eenmalig leestoegang tot het (privé) image:
 
 ### Op de Synology
 
-1. **Container Manager → Project → Maken**
+1. **File Station**: maak in de gedeelde map `docker` een projectmap, bv. `docker/boekhoud`, met daarin de submappen **`data`** (database, facturen, lokale backups) en **`backup`** (versleutelde backups). Synology maakt ontbrekende mappen niet zelf aan.
+2. **Container Manager → Project → Maken**
    - Projectnaam: `boekhouding`
-   - Pad: een lege map in de gedeelde map `docker`, bv. `docker/Boekhoudsoftware` (maak die aan via de knop in het venster)
+   - Pad: de projectmap, bv. `/volume1/docker/boekhoud` (het volume zie je in File Station via Eigenschappen)
    - Bron: **docker-compose.yml maken** en plak de inhoud van [`docker-compose.yml`](docker-compose.yml).
    - Volgende → Klaar. Het image wordt opgehaald en de container gestart.
-   - De submappen `data` (database, facturen, lokale backups) en `backup` (versleutelde backups) worden bij de eerste start automatisch in de projectmap aangemaakt.
-2. **Container Manager → Container → boekhouding → Log**: kopieer het **setup-token**.
-3. Open **`http://<ip-van-je-nas>:3000`**, maak je gebruiker aan met het token en stel 2FA in met een authenticator-app.
-4. Ga in de app naar **Instellingen** en vul de koppelingen in. Elk onderdeel heeft een testknop:
+   - Sla de stap "webportaal via Web Station" over; die bezet anders dezelfde poort.
+3. **Container Manager → Container → boekhouding → Log**: kopieer het **setup-token**.
+4. Open **`http://<ip-van-je-nas>:3000`**, maak je gebruiker aan met het token en stel 2FA in met een authenticator-app.
+5. Ga in de app naar **Instellingen** en vul de koppelingen in. Elk onderdeel heeft een testknop:
    - **Backupbeveiliging**: klik *Sleutelpaar maken* en bewaar de getoonde geheime sleutel in je wachtwoordmanager. Klik ook *Herstelsleutel tonen* en bewaar die.
    - **Mollie**: Organization access token met `sales-invoices.read` en `settlements.read`.
    - **AI-uitlezen**: Anthropic API-sleutel.
    - **Outlook**: volg de stappen op de pagina (app-registratie in Microsoft Entra), en klik daarna *Outlook koppelen*.
-5. **Hyper Backup**: maak een taak voor de map `docker/Boekhoudsoftware/backup` naar Synology C2, een USB-schijf of een tweede NAS (of gebruik **Cloud Sync** naar OneDrive). De bestanden daarin zijn al versleuteld.
+6. **Hyper Backup**: maak een taak voor de map `docker/boekhoud/backup` naar Synology C2, een USB-schijf of een tweede NAS (of gebruik **Cloud Sync** naar OneDrive). De bestanden daarin zijn al versleuteld.
 
-De container zet bij het opstarten zelf de rechten van beide submappen goed en draait daarna als gewone gebruiker (niet als root).
+De container zet bij het opstarten zelf de rechten van beide submappen goed (je hoeft geen rechten in te stellen) en draait daarna als gewone gebruiker (niet als root).
 
 ### Beveiligingsadvies voor toegang via `http://nas-ip:3000`
 

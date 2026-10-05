@@ -1,10 +1,11 @@
 # ================================================================
 # Boekhouding Medialan – Synology Container Manager
 #
-# 1. Container Manager → Project → Maken → kies een (lege) projectmap, bv. docker/Boekhoudsoftware
-# 2. Bron: "docker-compose.yml maken" → plak dit bestand
+# 1. File Station: maak een projectmap (bv. docker/boekhoud) met daarin de submappen  data  en  backup
+#    (Synology maakt ontbrekende mappen niet zelf aan; de rechten zet de container wel zelf goed)
+# 2. Container Manager → Project → Maken → kies die projectmap → "docker-compose.yml maken" → plak dit bestand
+#    Sla de stap "webportaal via Web Station" over (die bezet anders dezelfde poort)
 # 3. Open http://<ip-van-je-nas>:3000
-# De mappen data/ en backup/ worden bij de eerste start automatisch in de projectmap aangemaakt.
 # ================================================================
 services:
   boekhouding:
