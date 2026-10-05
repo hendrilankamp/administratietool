@@ -1,9 +1,10 @@
 # ================================================================
 # Boekhouding Medialan – Synology Container Manager
 #
-# 1. Maak in File Station twee mappen:  docker/boekhouding  en  backup/boekhouding
-# 2. Container Manager → Project → Maken → "docker-compose.yml maken" → plak dit bestand
+# 1. Container Manager → Project → Maken → kies een (lege) projectmap, bv. docker/Boekhoudsoftware
+# 2. Bron: "docker-compose.yml maken" → plak dit bestand
 # 3. Open http://<ip-van-je-nas>:3000
+# De mappen data/ en backup/ worden bij de eerste start automatisch in de projectmap aangemaakt.
 # ================================================================
 services:
   boekhouding:
@@ -15,8 +16,8 @@ services:
     environment:
       TZ: Europe/Amsterdam
     volumes:
-      - /volume1/docker/boekhouding:/app/data           # database, facturen, lokale backups
-      - /volume1/backup/boekhouding:/backup-extern      # versleutelde backups (voor Hyper Backup)
+      - ./data:/app/data             # database, facturen, lokale backups
+      - ./backup:/backup-extern      # versleutelde backups → laat Hyper Backup deze map kopiëren
     read_only: true
     tmpfs:
       - /tmp:size=64m

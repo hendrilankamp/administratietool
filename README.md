@@ -33,24 +33,22 @@ Geef de Synology eenmalig leestoegang tot het (privé) image:
 
 ### Op de Synology
 
-1. **File Station**: maak twee mappen:
-   - `docker/boekhouding` (database, facturen en lokale backups)
-   - een gedeelde map `backup` met daarin `boekhouding` (versleutelde backups)
-2. **Container Manager → Project → Maken**
+1. **Container Manager → Project → Maken**
    - Projectnaam: `boekhouding`
-   - Pad: `/volume1/docker/boekhouding`
+   - Pad: een lege map in de gedeelde map `docker`, bv. `docker/Boekhoudsoftware` (maak die aan via de knop in het venster)
    - Bron: **docker-compose.yml maken** en plak de inhoud van [`docker-compose.yml`](docker-compose.yml).
    - Volgende → Klaar. Het image wordt opgehaald en de container gestart.
-3. **Container Manager → Container → boekhouding → Log**: kopieer het **setup-token**.
-4. Open **`http://<ip-van-je-nas>:3000`**, maak je gebruiker aan met het token en stel 2FA in met een authenticator-app.
-5. Ga in de app naar **Instellingen** en vul de koppelingen in. Elk onderdeel heeft een testknop:
+   - De submappen `data` (database, facturen, lokale backups) en `backup` (versleutelde backups) worden bij de eerste start automatisch in de projectmap aangemaakt.
+2. **Container Manager → Container → boekhouding → Log**: kopieer het **setup-token**.
+3. Open **`http://<ip-van-je-nas>:3000`**, maak je gebruiker aan met het token en stel 2FA in met een authenticator-app.
+4. Ga in de app naar **Instellingen** en vul de koppelingen in. Elk onderdeel heeft een testknop:
    - **Backupbeveiliging**: klik *Sleutelpaar maken* en bewaar de getoonde geheime sleutel in je wachtwoordmanager. Klik ook *Herstelsleutel tonen* en bewaar die.
    - **Mollie**: Organization access token met `sales-invoices.read` en `settlements.read`.
    - **AI-uitlezen**: Anthropic API-sleutel.
    - **Outlook**: volg de stappen op de pagina (app-registratie in Microsoft Entra), en klik daarna *Outlook koppelen*.
-6. **Hyper Backup**: maak een taak voor de map `backup/boekhouding` naar Synology C2, een USB-schijf of een tweede NAS (of gebruik **Cloud Sync** naar OneDrive). De bestanden daarin zijn al versleuteld.
+5. **Hyper Backup**: maak een taak voor de map `docker/Boekhoudsoftware/backup` naar Synology C2, een USB-schijf of een tweede NAS (of gebruik **Cloud Sync** naar OneDrive). De bestanden daarin zijn al versleuteld.
 
-De container zet bij het opstarten zelf de rechten van beide mappen goed en draait daarna als gewone gebruiker (niet als root).
+De container zet bij het opstarten zelf de rechten van beide submappen goed en draait daarna als gewone gebruiker (niet als root).
 
 ### Beveiligingsadvies voor toegang via `http://nas-ip:3000`
 
@@ -118,8 +116,8 @@ Wachtwoord-hashes en 2FA-geheimen staan niet in de JSON/CSV-bestanden.
 
 **Herstellen vanaf een externe (versleutelde) kopie**, bv. op een nieuwe NAS:
 
-1. Installeer zoals in hoofdstuk 1, maar zet vóór de eerste start je **herstelsleutel** als bestand `app-secret` in `docker/boekhouding` (dan blijven API-sleutels, Outlook-koppeling en 2FA geldig).
-2. Zet je geheime backupsleutel als bestand `medialan.key` in `backup/boekhouding`.
+1. Installeer zoals in hoofdstuk 1, maar zet vóór de eerste start je **herstelsleutel** als bestand `app-secret` in de submap `data` van de projectmap (dan blijven API-sleutels, Outlook-koppeling en 2FA geldig).
+2. Zet de backup en je geheime backupsleutel (bestand `medialan.key`) in de submap `backup` van de projectmap.
 3. Container Manager → Container → boekhouding → **Terminal** → Maken → `sh`, en voer uit:
    ```sh
    node src/backup/cli.ts restore /backup-extern/medialan-backup-....zip.age --identity /backup-extern/medialan.key
@@ -149,7 +147,7 @@ Elke versie krijgt ook een vaste tag (`sha-xxxxxxx`). Wil je terug naar een vori
 - Alleen bereikbaar vanaf het LAN of de VPN (geen poort open op de router). HTTPS via de DSM reverse proxy kan optioneel.
 - Login met wachtwoord (min. 12 tekens, scrypt) en verplichte TOTP-2FA. Na 5 fouten volgt een blokkade van 15 minuten. Sessies verlopen na 30 minuten inactiviteit.
 - CSRF-tokens op alle formulieren, strikte Content-Security-Policy, cookies `HttpOnly; SameSite=Strict` (en `Secure` zodra je via HTTPS werkt).
-- API-sleutels en tokens staan versleuteld in de database (sleutel: `docker/boekhouding/app-secret`, alleen leesbaar voor de app) en worden nooit teruggetoond of gelogd.
+- API-sleutels en tokens staan versleuteld in de database (sleutel: `data/app-secret` in de projectmap, alleen leesbaar voor de app) en worden nooit teruggetoond of gelogd.
 - Uploads worden op inhoud gecontroleerd (alleen PDF/PNG/JPG, max. 20 MB) en opgeslagen onder hun sha256.
 - De container draait na het opstarten als gewone gebruiker (niet root), met een read-only bestandssysteem, minimale rechten en `no-new-privileges`.
 - Geboekte facturen kun je niet verwijderen. Afgesloten BTW-perioden zijn vergrendeld en elke wijziging komt in het audit-log.

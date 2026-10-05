@@ -1,5 +1,5 @@
 # Alternatief zonder GitHub: bouw het image op de NAS zelf.
-# Zet de projectmap in /volume1/docker/boekhouding-app en kies dat pad bij Container Manager → Project.
+# Gebruik deze map (deploy/) uit de code als project; data/ en backup/ komen naast deploy/.
 services:
   boekhouding:
     build: ..
@@ -11,8 +11,8 @@ services:
     environment:
       TZ: Europe/Amsterdam
     volumes:
-      - /volume1/docker/boekhouding:/app/data
-      - /volume1/backup/boekhouding:/backup-extern
+      - ../data:/app/data
+      - ../backup:/backup-extern
     read_only: true
     tmpfs:
       - /tmp:size=64m
