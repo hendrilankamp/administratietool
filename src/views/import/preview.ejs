@@ -1,0 +1,96 @@
+<%- include('../partials/kop') %>
+<div class="acties mb0"><a href="/import">← Opnieuw beginnen</a></div>
+<h1>Controleren en importeren</h1>
+<p class="hulp">Bestand: <strong><%= bestandsnaam %></strong> · tekencodering <%= analyse.encoding %> · scheidingsteken “<%= analyse.scheiding === '\t' ? 'tab' : analyse.scheiding %>” · <%= analyse.kop.length %> kolommen</p>
+
+<% const hidden = () => { %>
+  <%- include('../partials/csrf') %>
+  <input type="hidden" name="t" value="<%= token %>"><input type="hidden" name="doel" value="<%= doel %>">
+  <input type="hidden" name="naam" value="<%= bestandsnaam %>"><% if (rekeningId) { %><input type="hidden" name="rekening" value="<%= rekeningId %>"><% } %>
+<% } %>
+
+<div class="paneel">
+  <% if (analyse.profiel && !aangepast) { %>
+    <p>Herkend profiel: <strong><%= analyse.profiel.naam %></strong></p>
+  <% } else if (!analyse.profiel) { %>
+    <div class="melding let">Het formaat is niet automatisch herkend. Kies een profiel of koppel de kolommen hieronder.</div>
+  <% } %>
+  <form method="post" action="/import/preview" class="rij">
+    <% hidden() %>
+    <div><label>Ander profiel kiezen</label><select name="profiel"><% profielen.forEach(p => { %><option value="<%= p.naam %>" <%= analyse.profiel && analyse.profiel.naam === p.naam ? 'selected' : '' %>><%= p.naam %></option><% }) %></select></div>
+    <div class="smal"><button type="submit">Toepassen</button></div>
+  </form>
+
+  <details <%= aangepast ? 'open' : '' %> class="mt1">
+    <summary>Kolommen zelf koppelen (nieuw profiel)</summary>
+    <% const cfg = analyse.profiel ? analyse.profiel.config : null; const gekozen = (v) => { const m = mapping.kolom && mapping.kolom[v]; if (m) return Array.isArray(m) ? m : [m]; return cfg && cfg.kolommen[v] ? cfg.kolommen[v] : []; }; %>
+    <form method="post" action="/import/preview" class="mt1">
+      <% hidden() %><input type="hidden" name="aangepast" value="1">
+      <div class="rij">
+        <% if (doel === 'banktransacties') { %>
+        <div class="smal"><label>Datumformaat</label><select name="datumFormaat"><% datumformaten.forEach(d => { %><option <%= (mapping.datumFormaat || (cfg && cfg.datumFormaat)) === d ? 'selected' : '' %>><%= d %></option><% }) %></select></div>
+        <div class="smal"><label>Decimaalteken</label><select name="decimaal"><option value="," <%= (mapping.decimaal || (cfg && cfg.decimaal)) === ',' ? 'selected' : '' %>>komma (1.234,56)</option><option value="." <%= (mapping.decimaal || (cfg && cfg.decimaal)) === '.' ? 'selected' : '' %>>punt (1234.56)</option></select></div>
+        <div class="smal"><label>Bedrag staat in</label><select name="bedragModus">
+          <% [['een_kolom','één kolom met +/−'],['bij_af','aparte kolommen bij/af'],['indicator','bedrag + kolom Af/Bij']].forEach(([v,l]) => { %><option value="<%= v %>" <%= (mapping.bedragModus || (cfg && cfg.bedragModus)) === v ? 'selected' : '' %>><%= l %></option><% }) %></select></div>
+        <div class="smal" data-modus="indicator"><label>Waarde voor afschrijving</label><input name="afWaarde" value="<%= mapping.afWaarde || (cfg && cfg.afWaarde) || 'Af' %>"></div>
+        <% } %>
+      </div>
+      <div class="kolommen mt1">
+        <% velden.forEach(v => { const sel = gekozen(v); const modusAttr = v === 'bedrag' ? 'een_kolom indicator' : (v === 'bij' || v === 'af') ? 'bij_af' : v === 'af_bij' ? 'indicator' : ''; %>
+          <div <%- modusAttr ? 'data-modus="' + modusAttr + '"' : '' %>>
+            <label><%= veldLabel[v] %><%= v === 'omschrijving' ? ' (meerdere mogelijk)' : '' %></label>
+            <select name="kolom[<%= v %>]" <%= v === 'omschrijving' ? 'multiple size=3' : '' %>>
+              <% if (v !== 'omschrijving') { %><option value="">— niet gebruiken —</option><% } %>
+              <% analyse.kop.forEach(k => { %><option value="<%= k %>" <%= sel.includes(k) ? 'selected' : '' %>><%= k %></option><% }) %>
+            </select>
+          </div>
+        <% }) %>
+      </div>
+      <div class="acties"><button type="submit">Voorbeeld bijwerken</button></div>
+    </form>
+  </details>
+</div>
+
+<% if (analyse.bank) { const b = analyse.bank; const nieuw = b.records.filter(r => !r.dubbel); %>
+  <div class="tegels">
+    <div class="tegel"><div class="label">Nieuw</div><div class="waarde"><%= nieuw.length %></div></div>
+    <div class="tegel"><div class="label">Al geïmporteerd</div><div class="waarde"><%= b.records.length - nieuw.length %></div></div>
+    <div class="tegel"><div class="label">Fouten (overgeslagen)</div><div class="waarde <%= b.fouten.length ? 'negatief' : '' %>"><%= b.fouten.length %></div></div>
+    <div class="tegel"><div class="label">Som nieuw</div><div class="waarde"><%= euro(nieuw.reduce((s, r) => s + r.bedrag, 0)) %></div></div>
+  </div>
+  <% if (b.fouten.length) { %><div class="melding fout">Regels met fouten:<ul><% b.fouten.slice(0, 20).forEach(f => { %><li>regel <%= f.regel %>: <%= f.melding %> <span class="mono klein"><%= f.ruw.join(' | ').slice(0, 120) %></span></li><% }) %></ul></div><% } %>
+  <div class="tabel-wrap"><table>
+    <thead><tr><th>Regel</th><th>Datum</th><th>Tegenpartij</th><th>IBAN</th><th>Omschrijving</th><th class="bedrag">Bedrag</th><th></th></tr></thead>
+    <tbody><% b.records.slice(0, 200).forEach(r => { %>
+      <tr class="<%= r.dubbel ? 'zacht' : '' %>"><td><%= r.regel %></td><td class="nowrap"><%= nlDatum(r.boekdatum) %></td><td><%= r.tegenpartij_naam || '' %></td><td class="mono klein"><%= r.tegenpartij_iban || '' %></td><td class="klein"><%= (r.omschrijving || '').slice(0, 100) %></td><td class="bedrag <%= r.bedrag < 0 ? 'negatief' : '' %>"><%= euro(r.bedrag) %></td><td><%= r.dubbel ? 'al aanwezig' : '' %></td></tr>
+    <% }) %></tbody>
+  </table></div>
+  <% if (b.records.length > 200) { %><p class="hulp">Eerste 200 van <%= b.records.length %> regels getoond.</p><% } %>
+<% } %>
+
+<% if (analyse.relaties) { const r = analyse.relaties; %>
+  <p><strong><%= r.records.filter(x => !x.bestaand).length %></strong> nieuwe relaties, <%= r.records.filter(x => x.bestaand).length %> bestaan al, <%= r.fouten.length %> met fouten.</p>
+  <div class="tabel-wrap"><table>
+    <thead><tr><th>Regel</th><th>Naam</th><th>Type</th><th>E-mail</th><th>IBAN</th><th>BTW</th><th></th></tr></thead>
+    <tbody><% r.records.slice(0, 200).forEach(x => { %><tr class="<%= x.bestaand ? 'zacht' : '' %>"><td><%= x.regel %></td><td><%= x.data.naam %></td><td><%= x.data.type || 'klant' %></td><td><%= x.data.email || '' %></td><td class="mono"><%= x.data.iban || '' %></td><td class="mono"><%= x.data.btw_nummer || '' %></td><td><%= x.bestaand ? 'bestaat al' : '' %></td></tr><% }) %></tbody>
+  </table></div>
+<% } %>
+
+<% if (analyse.profiel || aangepast) { %>
+  <form method="post" action="/import/uitvoeren" class="paneel">
+    <% hidden() %>
+    <% if (aangepast) { %>
+      <input type="hidden" name="aangepast" value="1">
+      <% ['datumFormaat','decimaal','bedragModus','afWaarde'].forEach(k => { if (mapping[k]) { %><input type="hidden" name="<%= k %>" value="<%= mapping[k] %>"><% } }) %>
+      <% Object.entries(mapping.kolom || {}).forEach(([v, k]) => { (Array.isArray(k) ? k : [k]).forEach(kk => { %><input type="hidden" name="kolom[<%= v %>]<%= Array.isArray(k) ? '[]' : '' %>" value="<%= kk %>"><% }) }) %>
+      <div class="rij">
+        <div class="smal"><label><input type="checkbox" name="profiel_opslaan" value="1" checked> Koppeling opslaan als profiel</label></div>
+        <div><label>Profielnaam</label><input name="profielnaam" value="<%= mapping.profielnaam || '' %>" placeholder="bv. Bunq zakelijk"></div>
+      </div>
+    <% } else { %>
+      <input type="hidden" name="profiel" value="<%= analyse.profiel.naam %>">
+    <% } %>
+    <div class="acties"><button class="primair" type="submit">Importeren</button><span class="hulp">De import gebeurt in één keer (alles of niets) en kan worden teruggedraaid zolang er niets is afgeletterd.</span></div>
+  </form>
+<% } %>
+<%- include('../partials/voet') %>

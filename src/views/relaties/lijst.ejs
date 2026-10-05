@@ -1,0 +1,24 @@
+<%- include('../partials/kop') %>
+<h1>Relaties</h1>
+<div class="acties">
+  <a class="knop primair" href="/relaties/nieuw?type=leverancier">+ Leverancier</a>
+  <a class="knop" href="/relaties/nieuw?type=klant">+ Klant</a>
+  <a class="knop" href="/import">Relaties importeren (CSV)</a>
+</div>
+<form method="get" class="rij">
+  <div><label>Zoeken</label><input name="zoek" value="<%= query.zoek || '' %>" placeholder="Naam, IBAN, BTW-nummer, e-mail"></div>
+  <div class="smal"><label>Type</label><select name="type"><option value="">Alle</option><option value="klant" <%= type === 'klant' ? 'selected' : '' %>>Klanten</option><option value="leverancier" <%= type === 'leverancier' ? 'selected' : '' %>>Leveranciers</option></select></div>
+  <div class="smal"><button type="submit">Filter</button></div>
+</form>
+<div class="tabel-wrap mt1">
+<table>
+  <thead><tr><th>Naam</th><th>Type</th><th>BTW-nummer</th><th>IBAN</th><th>E-mail</th><th>Land</th></tr></thead>
+  <tbody>
+  <% if (!relaties.length) { %><tr><td colspan="6" class="zacht">Geen relaties.</td></tr><% } %>
+  <% relaties.forEach(r => { %>
+    <tr><td><a href="/relaties/<%= r.id %>"><%= r.naam %></a></td><td><%= r.type %></td><td class="mono"><%= r.btw_nummer || '' %></td><td class="mono"><%= r.iban || '' %></td><td><%= r.email || '' %></td><td><%= r.land %></td></tr>
+  <% }) %>
+  </tbody>
+</table>
+</div>
+<%- include('../partials/voet') %>

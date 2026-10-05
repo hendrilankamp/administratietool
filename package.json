@@ -1,0 +1,41 @@
+{
+  "name": "boekhouding-medialan",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Eenvoudig, veilig boekhoudprogramma voor Medialan (lokaal / Synology)",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning src/server.ts",
+    "dev": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning --watch src/server.ts",
+    "test": "node --disable-warning=ExperimentalWarning --test \"test/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit",
+    "reset-2fa": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning src/auth/cli.ts reset-2fa",
+    "nieuw-wachtwoord": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning src/auth/cli.ts wachtwoord",
+    "backup": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning src/backup/cli.ts backup",
+    "restore": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning src/backup/cli.ts restore",
+    "verify-backup": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning src/backup/cli.ts verify"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.131.0",
+    "@azure/msal-node": "^7.0.1",
+    "age-encryption": "^0.3.1",
+    "csv-parse": "^7.0.3",
+    "ejs": "^7.0.1",
+    "express": "^5.2.1",
+    "fflate": "^0.8.3",
+    "helmet": "^8.3.0",
+    "multer": "^2.4.0",
+    "qrcode-generator": "^2.0.4",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/ejs": "^3.1.5",
+    "@types/express": "^5.0.6",
+    "@types/multer": "^2.3.0",
+    "@types/node": "^26.6.4",
+    "typescript": "^7.0.2"
+  }
+}

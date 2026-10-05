@@ -1,0 +1,3 @@
+"Date","Payee","Account number","Transaction type","Payment reference","Category","Amount (EUR)","Amount (Foreign Currency)","Type Foreign Currency","Exchange Rate"
+"2026-10-02","Hosting Bedrijf B.V.","NL91ABNA0417164300","Outgoing Transfer","Factuur HB-2026-118","Business","-121.0","","",""
+"2026-10-05","Klant X","NL02RABO0123456789","Income","INV-0007","Income","250.25","","",""

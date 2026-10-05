@@ -1,0 +1,41 @@
+<%- include('../partials/kop') %>
+<h1>CSV importeren</h1>
+<div class="paneel">
+  <form method="post" action="/import/upload" enctype="multipart/form-data">
+    <%- include('../partials/csrf') %>
+    <div class="rij">
+      <div class="smal"><label>Wat importeer je?</label>
+        <select name="doel"><option value="banktransacties">Banktransacties</option><option value="relaties">Relaties (klanten/leveranciers)</option></select></div>
+      <div><label>Bankrekening</label>
+        <select name="rekening_id"><% if (!rekeningen.length) { %><option value="">— maak eerst een rekening aan onder Rekeningen —</option><% } %><% rekeningen.forEach(r => { %><option value="<%= r.id %>"><%= r.naam %> (<%= r.iban %>)</option><% }) %></select></div>
+      <div><label>Profiel</label>
+        <select name="profiel"><option value="">Automatisch herkennen</option><% profielen.forEach(p => { %><option value="<%= p.naam %>"><%= p.naam %><%= p.ingebouwd ? '' : ' (eigen)' %></option><% }) %></select></div>
+    </div>
+    <div class="dropzone mt1">
+      <p class="mb0"><strong>Sleep het CSV-bestand hierheen</strong> of kies een bestand</p>
+      <p><input type="file" name="bestand" accept=".csv,text/csv,text/plain" required></p>
+      <p class="hulp" data-bestanden>In de N26-app: Bankrekening → Afschriften/Downloads → CSV. Overlappende periodes mogen: dubbele transacties worden herkend.</p>
+    </div>
+    <div class="acties"><button class="primair" type="submit">Verder naar controle</button></div>
+  </form>
+</div>
+
+<h2>Importgeschiedenis</h2>
+<div class="tabel-wrap"><table>
+  <thead><tr><th>Datum</th><th>Soort</th><th>Bestand</th><th>Profiel</th><th class="bedrag">Nieuw</th><th class="bedrag">Dubbel</th><th class="bedrag">Fout</th><th></th></tr></thead>
+  <tbody>
+  <% if (!batches.length) { %><tr><td colspan="8" class="zacht">Nog geen imports.</td></tr><% } %>
+  <% batches.forEach(b => { %>
+    <tr><td><%= nlTijdstip(b.aangemaakt_op) %></td><td><%= b.doel %><%= b.rekening ? ' – ' + b.rekening : '' %></td><td><%= b.bestandsnaam %></td><td><%= b.profiel_naam %></td>
+      <td class="bedrag"><%= b.aantal_nieuw %></td><td class="bedrag"><%= b.aantal_dubbel %></td><td class="bedrag"><%= b.aantal_fout %></td>
+      <td><% if (b.teruggedraaid_op) { %><span class="hulp">teruggedraaid</span><% } else if (b.doel === 'banktransacties') { %>
+        <form method="post" action="/import/batches/<%= b.id %>/terugdraaien" class="inline" data-bevestig="Alle transacties uit deze import verwijderen?"><%- include('../partials/csrf') %><button class="klein" type="submit">Terugdraaien</button></form><% } %></td></tr>
+  <% }) %>
+  </tbody>
+</table></div>
+
+<% const eigen = profielen.filter(p => !p.ingebouwd); if (eigen.length) { %>
+  <h2>Eigen profielen</h2>
+  <ul><% eigen.forEach(p => { %><li><%= p.naam %> (<%= p.config.doel %>) <form method="post" action="/import/profielen/<%= p.id %>/verwijderen" class="inline" data-bevestig="Profiel verwijderen?"><%- include('../partials/csrf') %><button class="klein link" type="submit">verwijderen</button></form></li><% }) %></ul>
+<% } %>
+<%- include('../partials/voet') %>

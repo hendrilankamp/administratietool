@@ -1,0 +1,39 @@
+<%# Bewerkbare factuurregels. Verwacht: regels, categorieen, btwCodes, bewerkbaar %>
+<% const tarieven = {}; btwCodes.forEach(c => tarieven[c.code] = { bp: c.tarief_bp, verlegd: !!c.verlegd }); %>
+<% const regelRij = (r) => { %>
+  <tr>
+    <td class="col-omschr"><input data-naam="omschrijving" value="<%= r.omschrijving || '' %>" <%= bewerkbaar ? '' : 'disabled' %>></td>
+    <td>
+      <select data-naam="categorie_id" <%= bewerkbaar ? '' : 'disabled' %>>
+        <option value="">– kies –</option>
+        <% categorieen.forEach(c => { %><option value="<%= c.id %>" data-btw="<%= c.standaard_btw_code || '' %>" <%= r.categorie_id === c.id ? 'selected' : '' %>><%= c.naam %></option><% }) %>
+      </select>
+    </td>
+    <td class="col-bedrag"><input class="bedrag" data-naam="bedrag_excl" value="<%= r.bedrag_excl !== undefined && r.bedrag_excl !== null ? invoerBedrag(r.bedrag_excl) : '' %>" inputmode="decimal" <%= bewerkbaar ? '' : 'disabled' %>></td>
+    <td class="col-btw">
+      <select data-naam="btw_code" <%= r.btw_code ? 'data-handmatig=1' : '' %> <%= bewerkbaar ? '' : 'disabled' %>>
+        <% btwCodes.forEach(c => { %><option value="<%= c.code %>" <%= r.btw_code === c.code ? 'selected' : '' %>><%= c.omschrijving %></option><% }) %>
+      </select>
+    </td>
+    <td class="col-bedrag"><input class="bedrag" data-naam="btw_bedrag" value="<%= r.btw_bedrag !== undefined && r.btw_bedrag !== null && r.id ? invoerBedrag(r.btw_bedrag) : '' %>" inputmode="decimal" title="Leeg = automatisch berekend" <%= bewerkbaar ? '' : 'disabled' %>></td>
+    <td><% if (bewerkbaar) { %><button class="klein gevaar" data-verwijder-regel title="Regel verwijderen">×</button><% } %></td>
+  </tr>
+<% } %>
+<div class="tabel-wrap">
+<table class="regels" <%= bewerkbaar ? 'data-bewerkbaar' : '' %> data-tarieven="<%= JSON.stringify(tarieven) %>">
+  <thead><tr><th>Omschrijving</th><th>Categorie</th><th class="bedrag">Bedrag excl.</th><th>BTW</th><th class="bedrag">BTW-bedrag</th><th></th></tr></thead>
+  <tbody>
+    <% (regels.length ? regels : [{}]).forEach(r => regelRij(r)) %>
+  </tbody>
+  <tfoot>
+    <tr><td colspan="2"><% if (bewerkbaar) { %><button class="klein" data-regel-toevoegen>+ Regel</button><% } %></td>
+      <td class="bedrag" id="tot-excl"><%= formatBedrag(regels.reduce((s, r) => s + (r.bedrag_excl || 0), 0)) %></td><td class="rechts">BTW</td>
+      <td class="bedrag" id="tot-btw"><%= formatBedrag(regels.reduce((s, r) => s + (r.btw_bedrag || 0), 0)) %></td><td></td></tr>
+    <tr><td colspan="3"></td><td class="rechts">Totaal incl.</td><td class="bedrag" id="tot-incl"><%= formatBedrag(regels.reduce((s, r) => s + (r.bedrag_excl || 0) + (r.btw_bedrag || 0), 0)) %></td><td></td></tr>
+  </tfoot>
+</table>
+</div>
+<% if (bewerkbaar) { %>
+<template id="regel-sjabloon"><% regelRij({}) %></template>
+<p class="hulp">BTW-bedrag leeg laten = automatisch berekend. Vul het alleen in als de factuur een (afrondings)afwijkend bedrag noemt. Bij verlegde BTW staat er geen BTW op de factuur; de app berekent de verlegde BTW in de aangifte.</p>
+<% } %>

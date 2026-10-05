@@ -1,0 +1,17 @@
+<div class="tabel-wrap mt1">
+<table>
+  <thead><tr><th>Datum</th><th>Tegenpartij</th><th>Omschrijving</th><th class="bedrag">Bedrag</th><th>Status</th></tr></thead>
+  <tbody>
+  <% if (!transacties.length) { %><tr><td colspan="5" class="zacht">Geen transacties.</td></tr><% } %>
+  <% transacties.forEach(t => { %>
+    <tr>
+      <td class="nowrap"><a href="/bank/transacties/<%= t.id %>"><%= nlDatum(t.boekdatum) %></a></td>
+      <td><a href="/bank/transacties/<%= t.id %>"><%= t.tegenpartij_naam || '—' %></a><br><span class="hulp mono"><%= t.tegenpartij_iban || '' %></span></td>
+      <td class="klein"><%= (t.omschrijving || '').slice(0, 120) %></td>
+      <td class="bedrag <%= t.bedrag < 0 ? 'negatief' : '' %>"><%= euro(t.bedrag) %></td>
+      <td><% if (t.status === 'gekoppeld') { %><span class="label-status ok">gekoppeld</span><% } else if (t.status === 'geboekt_zonder_factuur') { %><span class="label-status info">zonder factuur</span><% } else if (t.gekoppeld_bedrag) { %><span class="label-status let">deels</span><% } else { %><span class="label-status">open</span><% } %></td>
+    </tr>
+  <% }) %>
+  </tbody>
+</table>
+</div>

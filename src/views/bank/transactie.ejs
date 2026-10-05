@@ -1,0 +1,83 @@
+<%- include('../partials/kop') %>
+<% const rest = t.bedrag - (t.gekoppeld_bedrag || 0); %>
+<div class="acties mb0"><a href="/bank/afletteren">← Afletteren</a> · <a href="/bank/transacties">Alle transacties</a></div>
+<h1><%= t.tegenpartij_naam || 'Transactie' %> <span class="<%= t.bedrag < 0 ? 'negatief' : '' %>"><%= euro(t.bedrag) %></span></h1>
+<div class="paneel">
+  <div class="kolommen">
+    <div><label>Boekdatum</label><%= nlDatum(t.boekdatum) %><%= t.valutadatum && t.valutadatum !== t.boekdatum ? ' (valuta ' + nlDatum(t.valutadatum) + ')' : '' %></div>
+    <div><label>Tegenrekening</label><span class="mono"><%= t.tegenpartij_iban || '—' %></span></div>
+    <div><label>Type</label><%= t.type || '—' %></div>
+    <div><label>Status</label><%= t.status.replace(/_/g, ' ') %></div>
+  </div>
+  <p class="mt1"><label>Omschrijving</label><%= t.omschrijving || '—' %></p>
+  <% if (t.notitie) { %><p><label>Notitie</label><%= t.notitie %></p><% } %>
+</div>
+
+<% if (t.koppelingen.length || t.categorie_id) { %>
+  <div class="paneel">
+    <h3 class="mb0">Gekoppeld</h3>
+    <ul>
+      <% t.koppelingen.forEach(k => { %><li><a href="/<%= k.soort %>/<%= k.inkoopfactuur_id || k.verkoopfactuur_id %>"><%= k.soort %> <%= k.factuurnummer || '' %> – <%= k.relatie_naam || '' %></a>: <%= euro(k.bedrag) %><%= k.automatisch ? ' (automatisch)' : '' %></li><% }) %>
+      <% if (t.categorie_id) { const c = categorieen.find(c => c.id === t.categorie_id); %><li>Restant <%= euro(rest) %> geboekt op <strong><%= c ? c.naam : t.categorie_id %></strong> (zonder factuur)</li><% } %>
+    </ul>
+    <form method="post" action="/bank/transacties/<%= t.id %>/ontkoppel" data-bevestig="Alle koppelingen van deze transactie verwijderen?"><%- include('../partials/csrf') %><button class="gevaar klein" type="submit">Ontkoppelen</button></form>
+  </div>
+<% } %>
+
+<% if (t.status === 'open' || (rest !== 0 && !t.categorie_id)) { %>
+  <% if (voorstellen.length) { %>
+    <div class="paneel">
+      <h3 class="mb0">Voorstellen</h3>
+      <% voorstellen.forEach(v => { %>
+        <form method="post" action="/bank/transacties/<%= t.id %>/voorstel" class="voorstel">
+          <%- include('../partials/csrf') %><input type="hidden" name="sleutel" value="<%= v.sleutel %>">
+          <span><strong><%= v.titel %></strong> <span class="score">score <%= v.score %></span><br>
+            <span class="klein"><%= v.redenen.join(' · ') %></span>
+            <% if (v.koppelingen.length > 1 || v.rest) { %><br><span class="klein zacht"><%= v.koppelingen.map(k => k.label + ' ' + euro(k.bedrag)).join(', ') %><%= v.rest ? ' + ' + v.rest.label + ' ' + euro(v.rest.bedrag) : '' %></span><% } %>
+          </span>
+          <button class="<%= v.score >= 80 ? 'primair' : '' %>" type="submit"><%= v.soort === 'regel' ? 'Boeken' : 'Koppelen' %></button>
+        </form>
+      <% }) %>
+    </div>
+  <% } %>
+
+  <div class="paneel">
+    <h3 class="mb0">Handmatig koppelen aan een open factuur</h3>
+    <form method="get" class="rij"><div><input name="zoek" value="<%= zoek %>" placeholder="Zoek op factuurnummer of relatie"></div><div class="smal"><button type="submit">Zoeken</button></div></form>
+    <div class="tabel-wrap mt1"><table>
+      <thead><tr><th>Factuur</th><th>Relatie</th><th>Datum</th><th class="bedrag">Open</th><th>Bedrag koppelen</th></tr></thead>
+      <tbody>
+      <% if (!posten.length) { %><tr><td colspan="5" class="zacht">Geen passende open facturen.</td></tr><% } %>
+      <% posten.forEach(p => { %>
+        <tr>
+          <td><a href="/<%= p.soort %>/<%= p.id %>"><%= p.soort %> <%= p.factuurnummer || '#' + p.id %></a><%= p.mollie ? ' (Mollie)' : '' %></td>
+          <td><%= p.relatie_naam || '' %></td>
+          <td><%= nlDatum(p.factuurdatum) %></td>
+          <td class="bedrag"><%= euro(p.open) %></td>
+          <td>
+            <form method="post" action="/bank/transacties/<%= t.id %>/koppel" class="rij">
+              <%- include('../partials/csrf') %><input type="hidden" name="soort" value="<%= p.soort %>"><input type="hidden" name="factuur_id" value="<%= p.id %>">
+              <div><input class="bedrag" name="bedrag" placeholder="<%= invoerBedrag(Math.abs(Math.abs(p.bankBedrag) <= Math.abs(rest) ? p.bankBedrag : rest)) %>" inputmode="decimal"></div>
+              <div class="smal"><button class="klein" type="submit">Koppel</button></div>
+            </form>
+          </td>
+        </tr>
+      <% }) %>
+      </tbody>
+    </table></div>
+    <p class="hulp">Leeg bedrag = het openstaande bedrag (of het restant van de transactie). Een deelbetaling vul je zelf in.</p>
+  </div>
+
+  <div class="paneel">
+    <h3 class="mb0">Boeken zonder factuur</h3>
+    <p class="hulp">Voor bankkosten, privé-opnames/stortingen, belastingbetalingen of overboekingen tussen eigen rekeningen.<% if (t.koppelingen.length) { %> Het restant van <%= euro(rest) %> wordt op de categorie geboekt.<% } %></p>
+    <form method="post" action="/bank/transacties/<%= t.id %>/zonder-factuur" class="rij">
+      <%- include('../partials/csrf') %>
+      <div><label>Categorie</label><select name="categorie_id" required><option value="">– kies –</option><% categorieen.forEach(c => { %><option value="<%= c.id %>"><%= c.naam %></option><% }) %></select></div>
+      <div><label>Notitie</label><input name="notitie" maxlength="500"></div>
+      <div class="smal"><label><input type="checkbox" name="regel_maken" value="1"> Onthoud als bankregel</label></div>
+      <div class="smal"><button type="submit">Boeken</button></div>
+    </form>
+  </div>
+<% } %>
+<%- include('../partials/voet') %>

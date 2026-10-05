@@ -1,0 +1,25 @@
+<%- include('../partials/kop') %>
+<h1>Bankregels</h1>
+<p class="hulp">Een bankregel stelt voor om transacties zonder factuur op een categorie te boeken, bijvoorbeeld het N26-abonnement op Bankkosten. Regels worden alleen toegepast als er geen factuur beter past.</p>
+<div class="tabel-wrap"><table>
+  <thead><tr><th>Naam</th><th>Als</th><th>bevat</th><th>Categorie</th><th></th></tr></thead>
+  <tbody>
+  <% if (!regels.length) { %><tr><td colspan="5" class="zacht">Nog geen regels.</td></tr><% } %>
+  <% regels.forEach(r => { %>
+    <tr><td><%= r.naam %></td><td><%= r.veld %></td><td class="mono"><%= r.bevat %></td><td><%= r.categorie_naam || '' %></td>
+      <td><form method="post" action="/bank/regels/<%= r.id %>/verwijderen" class="inline" data-bevestig="Regel verwijderen?"><%- include('../partials/csrf') %><button class="klein gevaar" type="submit">Verwijderen</button></form></td></tr>
+  <% }) %>
+  </tbody>
+</table></div>
+<div class="paneel">
+  <h3 class="mb0">Regel toevoegen</h3>
+  <form method="post" action="/bank/regels" class="rij">
+    <%- include('../partials/csrf') %>
+    <div><label>Naam</label><input name="naam" required placeholder="N26 abonnement"></div>
+    <div class="smal"><label>Veld</label><select name="veld"><option value="tegenpartij">Tegenpartij</option><option value="omschrijving">Omschrijving</option><option value="iban">IBAN</option></select></div>
+    <div><label>Bevat</label><input name="bevat" required placeholder="N26"></div>
+    <div><label>Categorie</label><select name="categorie_id" required><option value="">– kies –</option><% categorieen.forEach(c => { %><option value="<%= c.id %>"><%= c.naam %></option><% }) %></select></div>
+    <div class="smal"><button class="primair" type="submit">Toevoegen</button></div>
+  </form>
+</div>
+<%- include('../partials/voet') %>

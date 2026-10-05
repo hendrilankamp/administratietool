@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title><%= titel %> · Boekhouding Medialan</title>
+  <link rel="stylesheet" href="/static/stijl.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+<% if (gebruiker) { %>
+<div class="layout">
+  <aside class="zijbalk">
+    <div class="merk">Boekhouding<small>Medialan</small></div>
+    <nav class="nav">
+      <% const nav = (href, tekst, teller) => { const actief = href === '/' ? pad === '/' : pad.startsWith(href); %>
+        <a href="<%= href %>" class="<%= actief ? 'actief' : '' %>"><span><%= tekst %></span><% if (teller) { %><span class="teller"><%= teller %></span><% } %></a>
+      <% } %>
+      <% nav('/', 'Overzicht') %>
+      <div class="kop">Facturen</div>
+      <% nav('/inkoop', 'Inkoop', tellers && tellers.inkoop) %>
+      <% nav('/verkoop', 'Verkoop') %>
+      <% nav('/relaties', 'Relaties') %>
+      <div class="kop">Bank</div>
+      <% nav('/bank/afletteren', 'Afletteren', tellers && tellers.bank) %>
+      <% nav('/bank/transacties', 'Transacties') %>
+      <% nav('/import', 'CSV importeren') %>
+      <% nav('/bank/regels', 'Bankregels') %>
+      <div class="kop">Rapportage</div>
+      <% nav('/btw', 'BTW-aangifte') %>
+      <% nav('/rapportages', 'Winst & verlies') %>
+      <div class="kop">Beheer</div>
+      <% nav('/bank', 'Rekeningen') %>
+      <% nav('/instellingen', 'Instellingen') %>
+      <form method="post" action="/uitloggen">
+        <input type="hidden" name="_csrf" value="<%= csrf %>">
+        <button class="klein" type="submit">Uitloggen (<%= gebruiker %>)</button>
+      </form>
+    </nav>
+  </aside>
+  <main>
+<% } else { %>
+<div class="inlog">
+<% } %>
+<% if (flash) { %><div class="melding <%= flash.type %>"><%= flash.tekst %></div><% } %>

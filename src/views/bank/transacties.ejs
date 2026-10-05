@@ -1,0 +1,11 @@
+<%- include('../partials/kop') %>
+<h1>Banktransacties</h1>
+<form method="get" class="rij">
+  <div><label>Zoeken</label><input name="zoek" value="<%= query.zoek || '' %>" placeholder="Tegenpartij, omschrijving, IBAN"></div>
+  <div class="smal"><label>Status</label><select name="status"><option value="">Alle</option>
+    <% [['open','Open'],['gekoppeld','Gekoppeld'],['geboekt_zonder_factuur','Zonder factuur']].forEach(([v,l]) => { %><option value="<%= v %>" <%= status === v ? 'selected' : '' %>><%= l %></option><% }) %></select></div>
+  <% if (rekeningen.length > 1) { %><div class="smal"><label>Rekening</label><select name="rekening"><option value="">Alle</option><% rekeningen.forEach(r => { %><option value="<%= r.id %>" <%= String(query.rekening) === String(r.id) ? 'selected' : '' %>><%= r.naam %></option><% }) %></select></div><% } %>
+  <div class="smal"><button type="submit">Filter</button></div>
+</form>
+<%- include('tabel', { transacties }) %>
+<%- include('../partials/voet') %>

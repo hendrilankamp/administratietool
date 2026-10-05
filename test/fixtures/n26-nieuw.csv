@@ -1,0 +1,6 @@
+"Booking Date","Value Date","Partner Name","Partner Iban","Type","Payment Reference","Account Name","Amount (EUR)","Original Amount","Original Currency","Exchange Rate"
+"2026-10-01","2026-10-01","Stichting Mollie Payments","NL55INGB0000000000","Credit Transfer","Mollie uitbetaling 07049691.2610.01","Main Account","956.50","","",""
+"2026-10-02","2026-10-02","Hosting Bedrijf B.V.","NL91ABNA0417164300","Debit Transfer","Factuur HB-2026-118","Main Account","-121.00","","",""
+"2026-10-03","2026-10-03","N26","","Fee","Account fee","Main Account","-9.90","","",""
+"2026-10-03","2026-10-03","Albert Heijn","","MasterCard Payment","","Main Account","-4.50","","",""
+"2026-10-03","2026-10-03","Albert Heijn","","MasterCard Payment","","Main Account","-4.50","","",""

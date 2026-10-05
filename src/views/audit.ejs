@@ -1,0 +1,11 @@
+<%- include('partials/kop') %>
+<h1>Audit-log</h1>
+<form method="get" class="rij"><div><input name="zoek" value="<%= query.zoek || '' %>" placeholder="Actie, entiteit, gebruiker of ID"></div><div class="smal"><button type="submit">Zoeken</button></div></form>
+<div class="tabel-wrap mt1"><table>
+  <thead><tr><th>Tijdstip</th><th>Gebruiker</th><th>Actie</th><th>Entiteit</th><th>Details</th></tr></thead>
+  <tbody><% regels.forEach(r => { %>
+    <tr><td class="nowrap"><%= nlTijdstip(r.op) %></td><td><%= r.gebruiker || '' %></td><td><%= r.actie %></td><td><%= r.entiteit || '' %> <%= r.entiteit_id || '' %></td>
+      <td class="klein mono"><% if (r.details) { %><details><summary>toon</summary><%= r.details.slice(0, 3000) %></details><% } %></td></tr>
+  <% }) %></tbody>
+</table></div>
+<%- include('partials/voet') %>

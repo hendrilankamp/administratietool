@@ -1,0 +1,96 @@
+<%- include('../partials/kop') %>
+<% const bewerkbaar = true; const geboekt = f.status === 'geboekt'; %>
+<div class="acties mb0">
+  <a href="/inkoop<%= geboekt ? '?tab=geboekt' : '' %>">← Inkoopfacturen</a>
+</div>
+<h1>Inkoopfactuur <%= f.factuurnummer || ('#' + f.id) %> <%- include('../partials/betaalstatus', { f }) %></h1>
+
+<% if (f.ai_status === 'wachtrij' || f.ai_status === 'bezig') { %><span data-vernieuw="5"></span><div class="melding info">De AI leest deze factuur uit… de pagina vernieuwt automatisch.</div><% } %>
+<% if (f.ai_status === 'fout') { %><div class="melding fout">AI-uitlezen mislukt: <%= f.ai_melding %></div><% } %>
+<% if (f.ai_status === 'klaar' && f.ai_melding && !geboekt) { %>
+  <div class="melding let">Controleer het voorstel:<ul><% f.ai_melding.split('\n').forEach(m => { %><li><%= m %></li><% }) %></ul></div>
+<% } %>
+<% if (email) { %><p class="hulp">Ontvangen per e-mail van <%= email.afzender %> op <%= nlTijdstip(email.ontvangen_op) %>: “<%= email.onderwerp %>”</p><% } %>
+
+<div class="split">
+  <div>
+    <form method="post" action="/inkoop/<%= f.id %>" class="paneel">
+      <%- include('../partials/csrf') %>
+      <div class="rij">
+        <div>
+          <label for="rel">Leverancier</label>
+          <select id="rel" name="relatie_id" data-relatie-select>
+            <option value="">– kies leverancier –</option>
+            <% leveranciers.forEach(l => { %><option value="<%= l.id %>" data-categorie="<%= l.standaard_categorie_id || '' %>" <%= f.relatie_id === l.id ? 'selected' : '' %>><%= l.naam %></option><% }) %>
+          </select>
+        </div>
+        <div class="smal">
+          <label>&nbsp;</label>
+          <a class="knop" href="/relaties/nieuw?type=leverancier&amp;terug=/inkoop/<%= f.id %>">+ Nieuwe leverancier</a>
+        </div>
+      </div>
+      <% if (voorstel && !f.relatie_id) { %>
+        <div class="melding info">AI herkende: <strong><%= voorstel.leverancier.naam %></strong><%= voorstel.leverancier.btw_nummer ? ' (' + voorstel.leverancier.btw_nummer + ')' : '' %>.
+          <button type="submit" form="maak-lev" class="klein primair">Aanmaken als leverancier</button></div>
+      <% } %>
+      <div class="rij mt1">
+        <div><label for="nr">Factuurnummer</label><input id="nr" name="factuurnummer" value="<%= f.factuurnummer || '' %>"></div>
+        <div><label for="fd">Factuurdatum</label><input id="fd" type="date" name="factuurdatum" value="<%= f.factuurdatum || '' %>"></div>
+        <div><label for="vd">Vervaldatum</label><input id="vd" type="date" name="vervaldatum" value="<%= f.vervaldatum || '' %>"></div>
+      </div>
+      <div class="veld mt1"><label for="om">Omschrijving</label><input id="om" name="omschrijving" value="<%= f.omschrijving || '' %>"></div>
+
+      <h3>Regels</h3>
+      <%- include('../partials/regels', { regels: f.regels, categorieen, btwCodes, bewerkbaar }) %>
+
+      <div class="acties">
+        <% if (!geboekt) { %>
+          <button class="primair" type="submit" name="actie" value="boeken">Goedkeuren &amp; boeken</button>
+          <button type="submit" name="actie" value="opslaan">Opslaan als concept</button>
+        <% } else { %>
+          <button class="primair" type="submit" name="actie" value="opslaan">Wijzigingen opslaan</button>
+        <% } %>
+      </div>
+    </form>
+
+    <% if (voorstel && !f.relatie_id) { %>
+      <form id="maak-lev" method="post" action="/inkoop/<%= f.id %>/leverancier-uit-voorstel" class="verborgen"><%- include('../partials/csrf') %></form>
+    <% } %>
+
+    <div class="paneel">
+      <h3 class="mb0">Betaling</h3>
+      <% if (koppelingen.length) { %>
+        <ul><% koppelingen.forEach(k => { %><li><a href="/bank/transacties/<%= k.transactie_id %>"><%= nlDatum(k.transactie.boekdatum) %> – <%= k.transactie.tegenpartij_naam || '' %></a>: <%= euro(-k.bedrag) %></li><% }) %></ul>
+      <% } %>
+      <% if (geboekt) { %>
+        <p>Betaald via bank: <%= euro(f.betaald_bank) %> · Openstaand: <strong><%= euro(f.openstaand) %></strong></p>
+        <% if (f.betaald_handmatig_op) { %>
+          <form method="post" action="/inkoop/<%= f.id %>/betaald" class="inline"><%- include('../partials/csrf') %><input type="hidden" name="ongedaan" value="1">Handmatig betaald op <%= nlDatum(f.betaald_handmatig_op) %> <button class="klein" type="submit">ongedaan maken</button></form>
+        <% } else if (f.betaalstatus !== 'betaald') { %>
+          <form method="post" action="/inkoop/<%= f.id %>/betaald" class="rij"><%- include('../partials/csrf') %>
+            <div class="smal"><label>Handmatig betaald (bv. contant/creditcard)</label><input type="date" name="datum" required></div>
+            <div class="smal"><button type="submit">Markeer betaald</button></div>
+          </form>
+          <p class="hulp">Bij betaling via N26 koppel je de afschrijving onder <a href="/bank/afletteren">Afletteren</a>.</p>
+        <% } %>
+      <% } else { %><p class="hulp">Na het boeken kun je de betaling koppelen.</p><% } %>
+    </div>
+
+    <div class="acties">
+      <% if (!geboekt && f.bijlage_sha256 && ai) { %><form method="post" action="/inkoop/<%= f.id %>/ai" class="inline" data-bevestig="De huidige regels worden vervangen door een nieuw AI-voorstel. Doorgaan?"><%- include('../partials/csrf') %><button type="submit">Opnieuw uitlezen met AI</button></form><% } %>
+      <% if (!geboekt) { %><form method="post" action="/inkoop/<%= f.id %>/verwijderen" class="inline" data-bevestig="Deze factuur verwijderen?"><%- include('../partials/csrf') %><button class="gevaar" type="submit">Verwijderen</button></form><% } %>
+      <% if (geboekt && !koppelingen.length) { %><form method="post" action="/inkoop/<%= f.id %>/terug-naar-beoordelen" class="inline" data-bevestig="Terugzetten naar te beoordelen? De factuur telt dan niet meer mee in de BTW."><%- include('../partials/csrf') %><button type="submit">Terug naar 'te beoordelen'</button></form><% } %>
+      <a href="/instellingen/audit?zoek=<%= f.id %>" class="klein">Historie</a>
+    </div>
+  </div>
+
+  <div class="voorbeeld">
+    <% if (f.bijlage_sha256) { %>
+      <iframe src="/bijlagen/<%= f.bijlage_sha256 %>" title="Factuur"></iframe>
+      <p class="hulp"><a href="/bijlagen/<%= f.bijlage_sha256 %>" target="_blank" rel="noopener">Openen in nieuw venster</a> · <a href="/bijlagen/<%= f.bijlage_sha256 %>?download=1">Downloaden</a></p>
+    <% } else { %>
+      <div class="paneel zacht">Geen PDF bij deze factuur.</div>
+    <% } %>
+  </div>
+</div>
+<%- include('../partials/voet') %>

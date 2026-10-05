@@ -1,0 +1,53 @@
+<%- include('../partials/kop') %>
+<h1>Inkoopfacturen</h1>
+
+<div class="paneel">
+  <form method="post" action="/inkoop/upload" enctype="multipart/form-data" class="dropzone">
+    <%- include('../partials/csrf') %>
+    <p class="mb0"><strong>Sleep PDF's hierheen</strong> of kies bestanden</p>
+    <p><input type="file" name="bestanden" accept="application/pdf,image/png,image/jpeg" multiple required></p>
+    <p class="hulp" data-bestanden><%= ai ? 'Na het uploaden leest de AI de facturen uit; jij controleert en boekt.' : 'AI-uitlezen staat uit (stel Claude in onder Instellingen); je vult de gegevens zelf in.' %></p>
+    <button class="primair" type="submit">Uploaden</button>
+  </form>
+  <div class="acties">
+    <form method="post" action="/inkoop/outlook" class="inline"><%- include('../partials/csrf') %><button type="submit">Nu ophalen uit Outlook</button></form>
+    <form method="post" action="/inkoop/nieuw" class="inline"><%- include('../partials/csrf') %><button type="submit">Handmatig invoeren (zonder PDF)</button></form>
+  </div>
+</div>
+
+<div class="tabs">
+  <a href="/inkoop" class="<%= tab === 'te_beoordelen' ? 'actief' : '' %>">Te beoordelen (<%= aantalTeBeoordelen %>)</a>
+  <a href="/inkoop?tab=geboekt" class="<%= tab === 'geboekt' ? 'actief' : '' %>">Geboekt</a>
+</div>
+
+<% if (tab === 'geboekt') { %>
+<form method="get" class="rij">
+  <input type="hidden" name="tab" value="geboekt">
+  <div><label>Zoeken</label><input name="zoek" value="<%= query.zoek || '' %>" placeholder="Leverancier, factuurnummer…"></div>
+  <div class="smal"><label>Betaling</label><select name="betaal"><option value="">Alle</option><option value="onbetaald" <%= query.betaal === 'onbetaald' ? 'selected' : '' %>>Nog te betalen</option><option value="betaald" <%= query.betaal === 'betaald' ? 'selected' : '' %>>Betaald</option></select></div>
+  <div class="smal"><button type="submit">Filter</button></div>
+</form>
+<% } %>
+<% if (facturen.some(f => f.ai_status === 'wachtrij' || f.ai_status === 'bezig')) { %><span data-vernieuw="6"></span><p class="hulp">AI is bezig met uitlezen; deze pagina vernieuwt automatisch.</p><% } %>
+
+<div class="tabel-wrap mt1">
+<table>
+  <thead><tr><th>#</th><th>Datum</th><th>Leverancier</th><th>Factuurnr.</th><th>Omschrijving</th><th class="bedrag">Totaal</th><th>Status</th><% if (tab !== 'geboekt') { %><th>AI</th><% } %></tr></thead>
+  <tbody>
+  <% if (!facturen.length) { %><tr><td colspan="8" class="zacht">Geen facturen.</td></tr><% } %>
+  <% facturen.forEach(f => { %>
+    <tr>
+      <td><a href="/inkoop/<%= f.id %>"><%= f.id %></a></td>
+      <td class="nowrap"><%= nlDatum(f.factuurdatum) %></td>
+      <td><a href="/inkoop/<%= f.id %>"><%= f.relatie_naam || '—' %></a></td>
+      <td><%= f.factuurnummer || '' %></td>
+      <td class="zacht"><%= (f.omschrijving || '').slice(0, 60) %><%= f.bron === 'email' ? ' ✉' : '' %></td>
+      <td class="bedrag"><%= euro(f.totaal_incl) %></td>
+      <td><%- include('../partials/betaalstatus', { f }) %></td>
+      <% if (tab !== 'geboekt') { %><td><% if (f.ai_status === 'klaar') { %><span class="label-status <%= f.ai_melding ? 'let' : 'ok' %>"><%= f.ai_melding ? 'controleer' : 'voorstel' %></span><% } else if (f.ai_status === 'fout') { %><span class="label-status fout">fout</span><% } else if (f.ai_status === 'wachtrij' || f.ai_status === 'bezig') { %><span class="label-status info">bezig…</span><% } %></td><% } %>
+    </tr>
+  <% }) %>
+  </tbody>
+</table>
+</div>
+<%- include('../partials/voet') %>

@@ -1,0 +1,12 @@
+<%- include('../partials/kop') %>
+<div class="paneel">
+  <h1>Verificatiecode</h1>
+  <p class="hulp">Voer de 6-cijferige code uit je authenticator-app in.</p>
+  <form method="post" action="/login/2fa">
+    <%- include('../partials/csrf') %>
+    <input type="hidden" name="terug" value="<%= terug %>">
+    <div class="veld"><label for="c">Code</label><input id="c" name="code" inputmode="numeric" pattern="[0-9 ]{6,7}" maxlength="7" required autofocus autocomplete="one-time-code"></div>
+    <button class="primair" type="submit">Bevestigen</button>
+  </form>
+</div>
+<%- include('../partials/voet') %>

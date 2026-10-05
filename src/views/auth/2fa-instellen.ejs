@@ -1,0 +1,13 @@
+<%- include('../partials/kop') %>
+<div class="paneel">
+  <h1>Tweestapsverificatie instellen</h1>
+  <p>Scan deze QR-code met een authenticator-app (bijv. Microsoft Authenticator, Google Authenticator, 1Password) en voer de code in.</p>
+  <div class="qr"><%- qrSvg %></div>
+  <p class="hulp">Of voer de sleutel handmatig in: <code><%= geheim %></code></p>
+  <form method="post" action="/login/2fa-instellen">
+    <%- include('../partials/csrf') %>
+    <div class="veld"><label for="c">Code uit de app</label><input id="c" name="code" inputmode="numeric" pattern="[0-9 ]{6,7}" maxlength="7" required autofocus autocomplete="one-time-code"></div>
+    <button class="primair" type="submit">Activeren</button>
+  </form>
+</div>
+<%- include('../partials/voet') %>

@@ -1,0 +1,43 @@
+<%- include('partials/kop') %>
+<h1>Rapportages</h1>
+<form method="get" class="rij">
+  <div class="smal"><label>Jaar</label><input type="number" name="jaar" value="<%= jaar %>" min="2000" max="2100"></div>
+  <div class="smal"><label>Periode</label><select name="kwartaal"><option value="">Heel jaar</option><% [1,2,3,4].forEach(k => { %><option value="<%= k %>" <%= kw === k ? 'selected' : '' %>>Q<%= k %></option><% }) %></select></div>
+  <div class="smal"><button type="submit">Toon</button></div>
+  <div class="smal"><a class="knop" href="/rapportages/export/<%= jaar %>">Export voor accountant <%= jaar %> (zip)</a></div>
+</form>
+
+<h2>Winst &amp; verlies <%= kw ? 'Q' + kw + ' ' : '' %><%= jaar %> <span class="hulp">(exclusief BTW)</span></h2>
+<div class="kolommen">
+  <div class="tabel-wrap"><table>
+    <thead><tr><th>Omzet</th><th class="bedrag">Bedrag</th></tr></thead>
+    <tbody><% wv.omzet.forEach(r => { %><tr><td><%= r.categorie %></td><td class="bedrag"><%= euro(r.bedrag) %></td></tr><% }) %></tbody>
+    <tfoot><tr><td>Totaal omzet</td><td class="bedrag"><%= euro(wv.totaalOmzet) %></td></tr></tfoot>
+  </table></div>
+  <div class="tabel-wrap"><table>
+    <thead><tr><th>Kosten</th><th class="bedrag">Bedrag</th></tr></thead>
+    <tbody><% wv.kosten.forEach(r => { %><tr><td><%= r.categorie %></td><td class="bedrag"><%= euro(r.bedrag) %></td></tr><% }) %></tbody>
+    <tfoot><tr><td>Totaal kosten</td><td class="bedrag"><%= euro(wv.totaalKosten) %></td></tr></tfoot>
+  </table></div>
+</div>
+<div class="paneel"><strong>Resultaat: <span class="<%= wv.resultaat < 0 ? 'negatief' : '' %>"><%= euro(wv.resultaat) %></span></strong>
+  <p class="hulp mb0">Investeringen boven € 450 moeten fiscaal worden afgeschreven; die staan hier als kosten. Bespreek ze met je accountant. Bedragen bij “neutraal” (privé, belastingen, eigen overboekingen) tellen niet mee.</p>
+</div>
+<% if (wv.neutraal.length) { %><p class="hulp">Neutraal: <%= wv.neutraal.map(r => r.categorie + ' ' + euro(r.bedrag)).join(' · ') %></p><% } %>
+
+<h2 id="debiteuren">Nog te ontvangen</h2>
+<div class="tabel-wrap"><table>
+  <thead><tr><th>Factuur</th><th>Klant</th><th>Datum</th><th>Vervaldatum</th><th class="bedrag">Open</th></tr></thead>
+  <tbody><% if (!debiteuren.length) { %><tr><td colspan="5" class="zacht">Niets openstaand.</td></tr><% } %>
+  <% debiteuren.forEach(f => { %><tr><td><a href="/verkoop/<%= f.id %>"><%= f.factuurnummer || '#' + f.id %></a></td><td><%= f.relatie_naam || '' %></td><td><%= nlDatum(f.factuurdatum) %></td><td class="<%= f.vervaldatum && f.vervaldatum < vandaag ? 'negatief' : '' %>"><%= nlDatum(f.vervaldatum) %></td><td class="bedrag"><%= euro(f.openstaand) %></td></tr><% }) %></tbody>
+  <tfoot><tr><td colspan="4">Totaal</td><td class="bedrag"><%= euro(debiteuren.reduce((s, f) => s + f.openstaand, 0)) %></td></tr></tfoot>
+</table></div>
+
+<h2 id="crediteuren">Nog te betalen</h2>
+<div class="tabel-wrap"><table>
+  <thead><tr><th>Factuur</th><th>Leverancier</th><th>Datum</th><th>Vervaldatum</th><th class="bedrag">Open</th></tr></thead>
+  <tbody><% if (!crediteuren.length) { %><tr><td colspan="5" class="zacht">Niets openstaand.</td></tr><% } %>
+  <% crediteuren.forEach(f => { %><tr><td><a href="/inkoop/<%= f.id %>"><%= f.factuurnummer || '#' + f.id %></a></td><td><%= f.relatie_naam || '' %></td><td><%= nlDatum(f.factuurdatum) %></td><td class="<%= f.vervaldatum && f.vervaldatum < vandaag ? 'negatief' : '' %>"><%= nlDatum(f.vervaldatum) %></td><td class="bedrag"><%= euro(f.openstaand) %></td></tr><% }) %></tbody>
+  <tfoot><tr><td colspan="4">Totaal</td><td class="bedrag"><%= euro(crediteuren.reduce((s, f) => s + f.openstaand, 0)) %></td></tr></tfoot>
+</table></div>
+<%- include('partials/voet') %>

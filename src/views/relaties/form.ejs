@@ -1,0 +1,49 @@
+<%- include('../partials/kop') %>
+<div class="acties mb0"><a href="/relaties">← Relaties</a></div>
+<h1><%= r.id ? r.naam : 'Nieuwe relatie' %></h1>
+<form method="post" action="<%= r.id ? '/relaties/' + r.id : '/relaties/nieuw' %>" class="paneel">
+  <%- include('../partials/csrf') %>
+  <% if (!r.id && typeof query.terug === 'string') { %><input type="hidden" name="terug" value="<%= query.terug %>"><% } %>
+  <div class="rij">
+    <div><label for="naam">Naam *</label><input id="naam" name="naam" value="<%= r.naam || '' %>" required maxlength="200"></div>
+    <div class="smal"><label for="type">Type</label>
+      <select id="type" name="type"><% ['leverancier','klant','beide'].forEach(t => { %><option value="<%= t %>" <%= r.type === t ? 'selected' : '' %>><%= t %></option><% }) %></select></div>
+  </div>
+  <div class="rij mt1">
+    <div><label>BTW-nummer</label><input name="btw_nummer" value="<%= r.btw_nummer || '' %>" placeholder="NL123456789B01"></div>
+    <div><label>KvK-nummer</label><input name="kvk" value="<%= r.kvk || '' %>"></div>
+    <div><label>IBAN</label><input name="iban" value="<%= r.iban || '' %>" placeholder="NL00BANK0123456789"></div>
+    <div><label>E-mail</label><input name="email" type="email" value="<%= r.email || '' %>"></div>
+  </div>
+  <div class="rij mt1">
+    <div><label>Adres</label><input name="adres" value="<%= r.adres || '' %>"></div>
+    <div class="smal"><label>Postcode</label><input name="postcode" value="<%= r.postcode || '' %>"></div>
+    <div><label>Plaats</label><input name="plaats" value="<%= r.plaats || '' %>"></div>
+    <div class="smal"><label>Land (2 letters)</label><input name="land" value="<%= r.land || 'NL' %>" maxlength="2"></div>
+  </div>
+  <div class="rij mt1">
+    <div><label>Standaardcategorie</label>
+      <select name="standaard_categorie_id"><option value="">–</option><% categorieen.forEach(c => { %><option value="<%= c.id %>" <%= r.standaard_categorie_id === c.id ? 'selected' : '' %>><%= c.naam %></option><% }) %></select></div>
+    <div><label>Standaard BTW-code</label>
+      <select name="standaard_btw_code"><option value="">–</option><% btwCodes.forEach(c => { %><option value="<%= c.code %>" <%= r.standaard_btw_code === c.code ? 'selected' : '' %>><%= c.omschrijving %></option><% }) %></select></div>
+  </div>
+  <div class="veld mt1"><label>Notities</label><textarea name="notities" rows="2"><%= r.notities || '' %></textarea></div>
+  <p class="hulp">IBAN en naam worden gebruikt om banktransacties automatisch aan facturen te koppelen; het BTW-nummer om AI-voorstellen aan deze leverancier te koppelen.</p>
+  <button class="primair" type="submit">Opslaan</button>
+</form>
+<% if (r.id) { %>
+  <% if ((typeof inkoop !== 'undefined' && inkoop.length) || (typeof verkoop !== 'undefined' && verkoop.length)) { %>
+    <h2>Facturen</h2>
+    <div class="tabel-wrap"><table>
+      <thead><tr><th>Soort</th><th>Datum</th><th>Factuurnr.</th><th class="bedrag">Totaal</th><th>Status</th></tr></thead>
+      <tbody>
+      <% [...inkoop.map(f => ['inkoop', f]), ...verkoop.map(f => ['verkoop', f])].forEach(([s, f]) => { %>
+        <tr><td><%= s %></td><td><%= nlDatum(f.factuurdatum) %></td><td><a href="/<%= s %>/<%= f.id %>"><%= f.factuurnummer || ('#' + f.id) %></a></td><td class="bedrag"><%= euro(f.totaal_incl) %></td><td><%- include('../partials/betaalstatus', { f }) %></td></tr>
+      <% }) %>
+      </tbody>
+    </table></div>
+  <% } else { %>
+    <form method="post" action="/relaties/<%= r.id %>/verwijderen" data-bevestig="Relatie verwijderen?"><%- include('../partials/csrf') %><button class="gevaar" type="submit">Relatie verwijderen</button></form>
+  <% } %>
+<% } %>
+<%- include('../partials/voet') %>

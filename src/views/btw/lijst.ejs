@@ -1,0 +1,15 @@
+<%- include('../partials/kop') %>
+<h1>BTW-aangifte</h1>
+<p class="hulp">Overzicht per kwartaal op basis van factuurdatum (factuurstelsel). Bedragen in hele euro's zoals in de aangifte.</p>
+<div class="tabel-wrap"><table>
+  <thead><tr><th>Kwartaal</th><th>Status</th><th class="bedrag">Te betalen / (terug)</th><th></th></tr></thead>
+  <tbody>
+  <% lijst.forEach(k => { %>
+    <tr><td><a href="/btw/<%= k.id %>"><%= k.kwartaal %>e kwartaal <%= k.jaar %></a></td>
+      <td><% if (k.status === 'afgesloten') { %><span class="label-status ok">afgesloten</span><% } else { %><span class="label-status">open</span><% } %></td>
+      <td class="bedrag">€ <%= k.saldo.toLocaleString('nl-NL') %></td>
+      <td><a href="/btw/<%= k.id %>">Bekijken</a></td></tr>
+  <% }) %>
+  </tbody>
+</table></div>
+<%- include('../partials/voet') %>

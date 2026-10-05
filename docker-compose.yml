@@ -1,0 +1,37 @@
+# ================================================================
+# Boekhouding Medialan – Synology Container Manager
+#
+# 1. Maak in File Station twee mappen:  docker/boekhouding  en  backup/boekhouding
+# 2. Container Manager → Project → Maken → "docker-compose.yml maken" → plak dit bestand
+# 3. Open http://<ip-van-je-nas>:3000
+# ================================================================
+services:
+  boekhouding:
+    image: ghcr.io/hendrilankamp/administratietool:latest
+    container_name: boekhouding
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      TZ: Europe/Amsterdam
+    volumes:
+      - /volume1/docker/boekhouding:/app/data           # database, facturen, lokale backups
+      - /volume1/backup/boekhouding:/backup-extern      # versleutelde backups (voor Hyper Backup)
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:                     # alleen nodig bij het opstarten om mapsrechten te zetten
+      - CHOWN
+      - FOWNER
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"

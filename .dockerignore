@@ -1,0 +1,8 @@
+node_modules
+data
+secrets
+.env
+.git
+test
+*.log
+.DS_Store

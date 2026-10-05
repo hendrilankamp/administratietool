@@ -1,0 +1,49 @@
+<%- include('../partials/kop') %>
+<% const p = a.periode; const euros = Object.fromEntries(a.aangifteEuros.map(r => [r.rubriek, r])); %>
+<div class="acties mb0"><a href="/btw">← BTW-aangifte</a></div>
+<h1>BTW <%= p.kwartaal %>e kwartaal <%= p.jaar %> <% if (p.status === 'afgesloten') { %><span class="label-status ok">afgesloten <%= nlTijdstip(p.afgesloten_op) %></span><% } %></h1>
+<p class="hulp"><%= nlDatum(a.van) %> t/m <%= nlDatum(a.tot) %> · <%= a.aantalFacturen.verkoop %> verkoop- en <%= a.aantalFacturen.inkoop %> inkoopfacturen geboekt</p>
+<% if (a.waarschuwingen.length) { %><div class="melding let">Controleer vóór het indienen:<ul><% a.waarschuwingen.forEach(w => { %><li><%= w %></li><% }) %></ul></div><% } %>
+
+<div class="tabel-wrap"><table>
+  <thead><tr><th>Rubriek</th><th>Omschrijving</th><th class="bedrag">Omzet (exact)</th><th class="bedrag">BTW (exact)</th><th class="bedrag">Aangifte omzet</th><th class="bedrag">Aangifte BTW</th></tr></thead>
+  <tbody>
+    <% a.regels.forEach(r => { const e = euros[r.rubriek]; %>
+      <tr class="<%= r.grondslag === 0 && r.btw === 0 ? 'zacht' : '' %>"><td><strong><%= r.rubriek %></strong></td><td><%= r.omschrijving %></td>
+        <td class="bedrag"><%= euro(r.grondslag) %></td><td class="bedrag"><%= ['1e','3a','3b','3c'].includes(r.rubriek) ? '' : euro(r.btw) %></td>
+        <td class="bedrag">€ <%= e.grondslag.toLocaleString('nl-NL') %></td><td class="bedrag"><%= ['1e','3a','3b','3c'].includes(r.rubriek) ? '' : '€ ' + e.btw.toLocaleString('nl-NL') %></td></tr>
+    <% }) %>
+  </tbody>
+  <tfoot>
+    <tr><td>5a</td><td>Verschuldigde omzetbelasting</td><td></td><td class="bedrag"><%= euro(a.verschuldigd) %></td><td></td><td class="bedrag">€ <%= euros['5a'].btw.toLocaleString('nl-NL') %></td></tr>
+    <tr><td>5b</td><td>Voorbelasting</td><td></td><td class="bedrag"><%= euro(a.voorbelasting) %></td><td></td><td class="bedrag">€ <%= euros['5b'].btw.toLocaleString('nl-NL') %></td></tr>
+    <tr><td>5c</td><td><%= a.teBetalenEuros >= 0 ? 'Te betalen' : 'Terug te vragen' %></td><td></td><td class="bedrag"><%= euro(a.saldo) %></td><td></td><td class="bedrag">€ <%= a.teBetalenEuros.toLocaleString('nl-NL') %></td></tr>
+  </tfoot>
+</table></div>
+<p class="hulp">In de aangifte worden bedragen afgerond op hele euro's in uw voordeel (omzet en verschuldigde BTW omlaag, voorbelasting omhoog). Verlegde BTW (2a, 4a, 4b) wordt berekend en tegelijk als voorbelasting meegenomen. Controleer de aangifte altijd voordat je hem indient bij de Belastingdienst.</p>
+
+<div class="kolommen">
+  <% if (p.status === 'open') { %>
+  <form method="post" action="/btw/<%= p.id %>/correctie" class="paneel">
+    <%- include('../partials/csrf') %>
+    <h3 class="mb0">Correctie privégebruik (1d)</h3>
+    <div class="rij"><div><label>Omzet</label><input class="bedrag" name="grondslag" value="<%= invoerBedrag(p.correctie_1d_grondslag) %>"></div><div><label>BTW</label><input class="bedrag" name="btw" value="<%= invoerBedrag(p.correctie_1d_btw) %>"></div></div>
+    <div class="veld mt1"><label>Toelichting</label><input name="notitie" value="<%= p.notitie || '' %>"></div>
+    <button type="submit">Opslaan</button>
+  </form>
+  <form method="post" action="/btw/<%= p.id %>/afsluiten" class="paneel" data-bevestig="Kwartaal afsluiten? Facturen in deze periode kunnen daarna niet meer worden gewijzigd.">
+    <%- include('../partials/csrf') %>
+    <h3 class="mb0">Aangifte ingediend?</h3>
+    <p class="hulp">Sluit het kwartaal af nadat je de aangifte hebt ingediend. Daarna kunnen facturen in dit kwartaal niet meer worden gewijzigd; correcties gaan via een creditfactuur in een open periode.</p>
+    <button class="primair" type="submit">Kwartaal afsluiten</button>
+  </form>
+  <% } else { %>
+  <form method="post" action="/btw/<%= p.id %>/heropenen" class="paneel">
+    <%- include('../partials/csrf') %>
+    <h3 class="mb0">Heropenen</h3>
+    <p class="hulp">Alleen nodig als je een suppletie gaat indienen. Typ HEROPEN ter bevestiging.</p>
+    <div class="rij"><div><input name="bevestig" placeholder="HEROPEN" autocomplete="off"></div><div class="smal"><button class="gevaar" type="submit">Heropenen</button></div></div>
+  </form>
+  <% } %>
+</div>
+<%- include('../partials/voet') %>

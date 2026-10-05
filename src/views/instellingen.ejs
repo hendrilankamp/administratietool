@@ -1,0 +1,175 @@
+<%- include('partials/kop') %>
+<h1>Instellingen</h1>
+
+<% const bronTekst = (x) => x.bron === 'app' ? '' : x.bron === 'omgeving' ? ' (uit omgevingsvariabele)' : ''; %>
+<% const geheimVeld = (naam, label, x, hulp) => { %>
+  <div><label><%= label %></label>
+    <input type="password" name="<%= naam %>" autocomplete="off" placeholder="<%= x.ingesteld ? '•••••••• ingesteld' + bronTekst(x) + ' – leeg laten = ongewijzigd' : 'nog niet ingesteld' %>">
+    <% if (x.ingesteld && x.bron === 'app') { %><label class="klein"><input type="checkbox" name="wis_<%= naam %>" value="1"> wissen</label><% } %>
+    <% if (hulp) { %><span class="hulp"><%- hulp %></span><% } %>
+  </div>
+<% } %>
+
+<div class="paneel" id="mollie">
+  <h2 class="mb0">Mollie <% if (k.MOLLIE_TOKEN.ingesteld) { %><span class="label-status ok">ingesteld</span><% } %></h2>
+  <p class="hulp">Mollie Dashboard → Developers → <strong>Organization access tokens</strong> → nieuw token met alleen <code>sales-invoices.read</code> en <code>settlements.read</code>. Synchronisatie elk uur.</p>
+  <form method="post" action="/instellingen/koppelingen" class="rij">
+    <%- include('partials/csrf') %><input type="hidden" name="sectie" value="mollie">
+    <% geheimVeld('MOLLIE_TOKEN', 'Token', k.MOLLIE_TOKEN) %>
+    <div class="smal"><label><input type="checkbox" name="MOLLIE_TESTMODE" value="1" <%= k.MOLLIE_TESTMODE.waarde ? 'checked' : '' %>> Testmodus</label></div>
+    <div class="smal"><button class="primair" type="submit">Opslaan</button></div>
+  </form>
+  <% if (k.MOLLIE_TOKEN.ingesteld) { %><form method="post" action="/instellingen/test/mollie" class="acties"><%- include('partials/csrf') %><button type="submit">Verbinding testen</button></form><% } %>
+</div>
+
+<div class="paneel" id="ai">
+  <h2 class="mb0">AI-uitlezen (Claude) <% if (k.ANTHROPIC_API_KEY.ingesteld) { %><span class="label-status ok">ingesteld</span><% } %></h2>
+  <p class="hulp">https://console.anthropic.com → API Keys. Enkele centen per factuur; de PDF van een inkoopfactuur wordt daarvoor naar Anthropic gestuurd. Zonder sleutel vul je facturen zelf in.</p>
+  <form method="post" action="/instellingen/koppelingen" class="rij">
+    <%- include('partials/csrf') %><input type="hidden" name="sectie" value="ai">
+    <% geheimVeld('ANTHROPIC_API_KEY', 'API-sleutel', k.ANTHROPIC_API_KEY) %>
+    <div class="smal"><label>Model</label><input name="AI_MODEL" value="<%= k.AI_MODEL.waarde %>"></div>
+    <div class="smal"><button class="primair" type="submit">Opslaan</button></div>
+  </form>
+  <% if (k.ANTHROPIC_API_KEY.ingesteld) { %><form method="post" action="/instellingen/test/ai" class="acties"><%- include('partials/csrf') %><button type="submit">Verbinding testen</button></form><% } %>
+</div>
+
+<div class="paneel" id="outlook">
+  <h2 class="mb0">Outlook (Microsoft 365) <% if (outlook.status === 'gekoppeld') { %><span class="label-status ok">gekoppeld</span><% } %></h2>
+  <details <%= k.MS_CLIENT_ID.ingesteld ? '' : 'open' %>><summary>App-registratie (eenmalig)</summary>
+    <ol class="klein">
+      <li><a href="https://entra.microsoft.com" target="_blank" rel="noopener">entra.microsoft.com</a> → App-registraties → <strong>Nieuwe registratie</strong>: naam “Boekhouding Medialan”, alleen accounts in deze organisatie, geen omleidings-URI.</li>
+      <li><strong>Verificatie</strong> → “Openbare clientstromen toestaan” op <strong>Ja</strong>.</li>
+      <li><strong>API-machtigingen</strong> → Microsoft Graph → Gedelegeerd: <code>Mail.ReadWrite</code> en <code>offline_access</code>.</li>
+      <li>Kopieer de <strong>Toepassings-ID (client)</strong> en <strong>Map-ID (tenant)</strong> hieronder.</li>
+    </ol>
+    <form method="post" action="/instellingen/koppelingen">
+      <%- include('partials/csrf') %><input type="hidden" name="sectie" value="outlook">
+      <div class="rij">
+        <div><label>Toepassings-ID (client)</label><input name="MS_CLIENT_ID" value="<%= k.MS_CLIENT_ID.waarde || '' %>" placeholder="00000000-0000-0000-0000-000000000000"></div>
+        <div><label>Map-ID (tenant)</label><input name="MS_TENANT_ID" value="<%= k.MS_TENANT_ID.waarde || '' %>" placeholder="00000000-0000-0000-0000-000000000000"></div>
+      </div>
+      <div class="rij mt1">
+        <div><label>Map met facturen</label><input name="MS_MAP" value="<%= k.MS_MAP.waarde %>"></div>
+        <div><label>Submap voor verwerkte mail</label><input name="MS_MAP_VERWERKT" value="<%= k.MS_MAP_VERWERKT.waarde %>"></div>
+        <div class="smal"><label>Elke … minuten</label><input type="number" name="MS_POLL_MINUTEN" min="5" max="1440" value="<%= k.MS_POLL_MINUTEN.waarde %>"></div>
+        <div class="smal"><button class="primair" type="submit">Opslaan</button></div>
+      </div>
+    </form>
+  </details>
+  <% if (outlook.status === 'niet_ingesteld') { %>
+    <p class="hulp">Vul eerst de app-registratie in.</p>
+  <% } else if (outlook.status === 'gekoppeld') { %>
+    <p>Gekoppeld als <strong><%= outlook.account %></strong>. Map <strong><%= config.map %></strong> wordt elke <%= config.poll %> minuten gecontroleerd; verwerkte e-mails gaan naar <strong><%= config.map %>/<%= config.verwerkt %></strong>.</p>
+    <form method="post" action="/instellingen/outlook/ontkoppelen" data-bevestig="Outlook ontkoppelen?"><%- include('partials/csrf') %><button class="gevaar" type="submit">Ontkoppelen</button></form>
+  <% } else if (outlook.status === 'wachten_op_login') { %>
+    <span data-vernieuw="5"></span>
+    <div class="melding info">Ga naar <a href="<%= outlook.verificatieUrl %>" target="_blank" rel="noopener"><strong><%= outlook.verificatieUrl %></strong></a> en voer deze code in: <strong class="mono"><%= outlook.gebruikerscode %></strong><br><span class="hulp">Geldig tot <%= nlTijdstip(outlook.verlooptOp) %>. Deze pagina vernieuwt automatisch.</span></div>
+  <% } else { %>
+    <% if (outlook.status === 'fout') { %><div class="melding fout"><%= outlook.melding %></div><% } %>
+    <form method="post" action="/instellingen/outlook/koppelen" class="acties"><%- include('partials/csrf') %><button class="primair" type="submit">Outlook koppelen</button><span class="hulp">Maak in Outlook een map “<%= config.map %>” aan (bovenaan of onder Postvak IN).</span></form>
+  <% } %>
+</div>
+
+<div class="paneel" id="backup">
+  <h2 class="mb0">Backupbeveiliging</h2>
+  <% if (!externIngesteld) { %>
+    <div class="melding let">Er is geen externe backupmap gekoppeld (BACKUP_EXTERN_DIR). Op de Synology zit die in docker-compose.yml.</div>
+  <% } else if (!ageIngesteld) { %>
+    <div class="melding fout">Externe backups staan uit: kies hieronder een versleutelingssleutel.</div>
+  <% } else { %>
+    <p><span class="label-status ok">aan</span> Elke backup gaat ook versleuteld naar de backupmap (<%= k.AGE_RECIPIENT.ingesteld ? 'publieke sleutel ' + k.AGE_RECIPIENT.waarde.slice(0, 16) + '…' : 'wachtwoordzin' %>). Laat Hyper Backup of Cloud Sync die map buiten de NAS kopiëren.</p>
+  <% } %>
+  <div class="kolommen">
+    <form method="post" action="/instellingen/age-sleutelpaar" data-bevestig="Nieuw sleutelpaar maken? De geheime sleutel wordt één keer getoond; nieuwe backups zijn alleen daarmee te openen.">
+      <%- include('partials/csrf') %>
+      <h3 class="mb0">Optie A: sleutelpaar (aanbevolen)</h3>
+      <p class="hulp">De NAS kan backups maken maar niet openen; alleen jij hebt de geheime sleutel.</p>
+      <button type="submit"<%= k.AGE_RECIPIENT.ingesteld ? '' : ' class="primair"' %>>Sleutelpaar maken</button>
+    </form>
+    <form method="post" action="/instellingen/koppelingen">
+      <%- include('partials/csrf') %><input type="hidden" name="sectie" value="backup">
+      <h3 class="mb0">Optie B: wachtwoordzin</h3>
+      <div class="rij">
+        <div><label>Wachtwoordzin (min. 12 tekens)</label><input type="password" name="AGE_PASSPHRASE" autocomplete="new-password" placeholder="<%= k.AGE_PASSPHRASE.ingesteld ? '•••••••• ingesteld – leeg = ongewijzigd' : '' %>"></div>
+        <div><label>Herhaal</label><input type="password" name="AGE_PASSPHRASE2" autocomplete="new-password"></div>
+      </div>
+      <div class="rij mt1">
+        <div class="smal"><label>Dagelijkse backup na (uur)</label><input type="number" name="BACKUP_UUR" min="0" max="23" value="<%= k.BACKUP_UUR.waarde %>"></div>
+        <div class="smal"><button type="submit">Opslaan</button></div>
+      </div>
+    </form>
+  </div>
+  <h3>Herstelsleutel</h3>
+  <p class="hulp">Bewaar ook de herstelsleutel van de app in je wachtwoordmanager. Zonder die sleutel moet je na een herstel op een nieuwe NAS de API-sleutels opnieuw invullen, Outlook opnieuw koppelen en 2FA resetten.</p>
+  <form method="post" action="/instellingen/herstelsleutel" class="rij">
+    <%- include('partials/csrf') %>
+    <div class="smal"><label>Je wachtwoord</label><input type="password" name="wachtwoord" required autocomplete="current-password"></div>
+    <div class="smal"><button type="submit">Herstelsleutel tonen</button></div>
+  </form>
+</div>
+
+<div class="paneel" id="backups">
+  <h2 class="mb0">Backups</h2>
+  <% if (herstel) { %><div class="melding let">Herstel klaargezet vanuit <%= herstel.bron %>; wordt uitgevoerd bij de volgende start.</div><% } %>
+  <ul>
+    <li>Automatisch elke dag na <%= config.backupUur %>:00 uur, vóór elke databasemigratie en vóór een herstel.</li>
+    <li>Externe versleutelde kopie: <% if (externIngesteld && ageIngesteld) { %><span class="label-status ok">aan</span><% } else { %><span class="label-status fout">uit</span> – zie <a href="#backup">Backupbeveiliging</a><% } %></li>
+    <li>Laatste backup: <%= backupStatus && backupStatus.laatst_gelukt ? nlTijdstip(backupStatus.laatst_gelukt) : '—' %><% if (backupStatus && backupStatus.laatste_fout) { %> · <span class="negatief">laatste fout: <%= backupStatus.laatste_fout %></span><% } %></li>
+    <li>Testherstel: <%= testStatus && testStatus.laatst_gelukt ? nlTijdstip(testStatus.laatst_gelukt) + ' – ' + testStatus.melding : 'nog niet uitgevoerd' %><% if (testStatus && testStatus.laatste_fout) { %> · <span class="negatief"><%= testStatus.laatste_fout %></span><% } %></li>
+  </ul>
+  <div class="acties">
+    <form method="post" action="/instellingen/backup" class="inline"><%- include('partials/csrf') %><button class="primair" type="submit">Backup nu</button></form>
+    <form method="post" action="/instellingen/backup/test" class="inline"><%- include('partials/csrf') %><button type="submit">Testherstel uitvoeren</button></form>
+  </div>
+  <div class="tabel-wrap"><table>
+    <thead><tr><th>Backup</th><th>Datum</th><th class="bedrag">Grootte</th><th></th></tr></thead>
+    <tbody>
+    <% if (!backups.length) { %><tr><td colspan="4" class="zacht">Nog geen backups.</td></tr><% } %>
+    <% backups.forEach(b => { %>
+      <tr><td class="mono klein"><%= b.naam %></td><td><%= nlTijdstip(b.datum.toISOString()) %></td><td class="bedrag"><%= (b.grootte / 1024 / 1024).toFixed(1) %> MB</td>
+        <td class="nowrap"><a class="knop klein" href="/instellingen/backup/download/<%= encodeURIComponent(b.naam) %>">Download</a>
+          <details class="inline"><summary class="klein">Herstellen…</summary>
+            <form method="post" action="/instellingen/backup/herstel" class="rij">
+              <%- include('partials/csrf') %><input type="hidden" name="naam" value="<%= b.naam %>">
+              <div><input name="bevestig" placeholder="typ HERSTEL" autocomplete="off" required></div>
+              <div class="smal"><button class="gevaar klein" type="submit">Herstel</button></div>
+            </form>
+            <p class="hulp">Eerst wordt een backup van de huidige toestand gemaakt; de huidige database wordt bewaard in data/vorige-databases. De app herstart.</p>
+          </details></td></tr>
+    <% }) %>
+    </tbody>
+  </table></div>
+  <% if (extern && extern.length) { %><p class="hulp">Externe kopieën (versleuteld): <%= extern.length %>, nieuwste <%= extern[0].naam %>.</p><% } %>
+  <p class="hulp">Formaat: zip met <code>manifest.json</code> (checksums), <code>data/*.json</code>, <code>csv/*.csv</code>, <code>schema/*.schema.json</code>, de originele PDF's en een SQLite-snapshot. Zie README voor herstel zonder deze app.</p>
+</div>
+
+<div class="paneel" id="categorieen">
+  <h2 class="mb0">Categorieën</h2>
+  <div class="tabel-wrap mt1"><table>
+    <thead><tr><th>Naam</th><th>Soort</th><th>Standaard BTW</th><th>Actief</th><th></th></tr></thead>
+    <tbody><% categorieen.forEach(c => { %><tr class="<%= c.actief ? '' : 'zacht' %>"><td><%= c.naam %></td><td><%= c.soort %></td><td><%= c.standaard_btw_code || '' %></td><td><%= c.actief ? 'ja' : 'nee' %></td>
+      <td><form method="post" action="/instellingen/categorieen/<%= c.id %>/actief" class="inline"><%- include('partials/csrf') %><button class="klein" type="submit"><%= c.actief ? 'Deactiveren' : 'Activeren' %></button></form></td></tr><% }) %></tbody>
+  </table></div>
+  <form method="post" action="/instellingen/categorieen" class="rij">
+    <%- include('partials/csrf') %>
+    <div><label>Nieuwe categorie</label><input name="naam" required></div>
+    <div class="smal"><label>Soort</label><select name="soort"><option value="kosten">kosten</option><option value="omzet">omzet</option><option value="neutraal">neutraal</option></select></div>
+    <div class="smal"><label>Standaard BTW-code</label><select name="btw_code"><option value="NL21">NL21</option><option value="NL9">NL9</option><option value="NL0">NL0</option><option value="GEEN">GEEN</option><option value="EU_DIENST">EU_DIENST</option><option value="BUITEN_EU">BUITEN_EU</option><option value="VERLEGD_NL">VERLEGD_NL</option></select></div>
+    <div class="smal"><button type="submit">Toevoegen</button></div>
+  </form>
+</div>
+
+<div class="paneel">
+  <h2 class="mb0">Account</h2>
+  <form method="post" action="/account/wachtwoord" class="rij">
+    <%- include('partials/csrf') %>
+    <div><label>Huidig wachtwoord</label><input type="password" name="huidig" required autocomplete="current-password"></div>
+    <div><label>Nieuw wachtwoord (min. 12)</label><input type="password" name="nieuw" minlength="12" required autocomplete="new-password"></div>
+    <div><label>Herhaal</label><input type="password" name="nieuw2" minlength="12" required autocomplete="new-password"></div>
+    <div class="smal"><button type="submit">Wijzigen</button></div>
+  </form>
+  <p class="hulp">2FA opnieuw instellen (bv. nieuwe telefoon): <code>docker compose exec boekhouding npm run reset-2fa -- &lt;gebruiker&gt;</code></p>
+  <p><a href="/instellingen/audit">Audit-log bekijken</a></p>
+</div>
+<%- include('partials/voet') %>

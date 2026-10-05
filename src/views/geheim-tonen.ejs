@@ -1,0 +1,9 @@
+<%- include('partials/kop') %>
+<h1><%= kop %></h1>
+<div class="melding let"><%= uitleg %></div>
+<div class="paneel">
+  <label>Kopieer deze tekst (bestandsnaam suggestie: <code><%= bestandsnaam %></code>)</label>
+  <textarea readonly rows="4" class="mono"><%= geheim %></textarea>
+</div>
+<p><a class="knop primair" href="<%= terug %>">Ik heb hem veilig bewaard</a></p>
+<%- include('partials/voet') %>

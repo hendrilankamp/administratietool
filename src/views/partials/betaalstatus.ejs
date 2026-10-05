@@ -1,0 +1,7 @@
+<% if (f.status === 'te_beoordelen') { %><span class="label-status let">te beoordelen</span>
+<% } else if (f.status === 'concept') { %><span class="label-status">concept</span>
+<% } else if (f.status === 'vervallen') { %><span class="label-status">vervallen</span>
+<% } else if (f.betaalstatus === 'betaald') { %><span class="label-status ok">betaald</span>
+<% } else if (f.betaalstatus === 'deels') { %><span class="label-status info">deels betaald</span>
+<% } else if (f.vervaldatum && f.vervaldatum < new Date().toISOString().slice(0,10)) { %><span class="label-status fout">vervallen <%= nlDatum(f.vervaldatum) %></span>
+<% } else { %><span class="label-status">open</span><% } %>

@@ -1,0 +1,42 @@
+<%- include('../partials/kop') %>
+<h1>Afletteren <span class="hulp">(<%= totaalOpen %> open)</span></h1>
+<div class="acties">
+  <form method="post" action="/bank/auto" class="inline"><%- include('../partials/csrf') %><button type="submit" title="Koppelt alleen bij een eenduidige match: factuurnummer + exact bedrag, of een sluitende Mollie-uitbetaling">Automatisch afletteren</button></form>
+  <form method="post" action="/bank/regels/toepassen" class="inline"><%- include('../partials/csrf') %><button type="submit">Bankregels toepassen</button></form>
+  <a class="knop" href="/import">CSV importeren</a>
+  <a class="knop" href="/bank/ontbrekend">Factuur ontbreekt</a>
+</div>
+<% if (!items.length) { %><div class="melding ok">Alles is afgeletterd. 🎉</div><% } %>
+<div class="tabel-wrap">
+<table>
+  <thead><tr><th>Datum</th><th>Tegenpartij / omschrijving</th><th class="bedrag">Bedrag</th><th>Voorstellen</th></tr></thead>
+  <tbody>
+  <% items.forEach(({ t, voorstellen }) => { %>
+    <tr>
+      <td class="nowrap"><a href="/bank/transacties/<%= t.id %>"><%= nlDatum(t.boekdatum) %></a></td>
+      <td><a href="/bank/transacties/<%= t.id %>"><strong><%= t.tegenpartij_naam || '—' %></strong></a><br><span class="klein zacht"><%= (t.omschrijving || '').slice(0, 140) %></span></td>
+      <td class="bedrag <%= t.bedrag < 0 ? 'negatief' : '' %>"><%= euro(t.bedrag) %><% if (t.gekoppeld_bedrag) { %><br><span class="hulp">rest <%= euro(t.bedrag - t.gekoppeld_bedrag) %></span><% } %></td>
+      <td>
+        <% voorstellen.slice(0, 3).forEach(v => { %>
+          <form method="post" action="/bank/transacties/<%= t.id %>/voorstel" class="voorstel">
+            <%- include('../partials/csrf') %><input type="hidden" name="sleutel" value="<%= v.sleutel %>"><input type="hidden" name="terug" value="afletteren">
+            <span><%= v.titel %><br><span class="score"><%= v.redenen.join(' · ') %><%= v.koppelingen.length > 1 ? ' · ' + v.koppelingen.length + ' facturen' : '' %><%= v.rest ? ' · ' + v.rest.label + ' ' + euro(v.rest.bedrag) : '' %></span></span>
+            <button class="klein <%= v.score >= 80 ? 'primair' : '' %>" type="submit"><%= v.soort === 'regel' ? 'Boeken' : 'Koppel' %></button>
+          </form>
+        <% }) %>
+        <% if (!voorstellen.length) { %>
+          <form method="post" action="/bank/transacties/<%= t.id %>/zonder-factuur" class="rij">
+            <%- include('../partials/csrf') %><input type="hidden" name="terug" value="afletteren">
+            <div><select name="categorie_id" required><option value="">Boek zonder factuur op…</option><% categorieen.forEach(c => { %><option value="<%= c.id %>"><%= c.naam %></option><% }) %></select></div>
+            <div class="smal"><button class="klein" type="submit">Boeken</button></div>
+          </form>
+          <a class="klein" href="/bank/transacties/<%= t.id %>">zoek factuur…</a>
+        <% } %>
+      </td>
+    </tr>
+  <% }) %>
+  </tbody>
+</table>
+</div>
+<% if (totaalOpen > items.length) { %><p class="hulp">De nieuwste <%= items.length %> worden getoond.</p><% } %>
+<%- include('../partials/voet') %>

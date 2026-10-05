@@ -1,0 +1,13 @@
+<%- include('../partials/kop') %>
+<div class="paneel">
+  <h1>Inloggen</h1>
+  <form method="post" action="/login" autocomplete="on">
+    <%- include('../partials/csrf') %>
+    <input type="hidden" name="terug" value="<%= terug %>">
+    <div class="veld"><label for="g">Gebruikersnaam</label><input id="g" name="gebruikersnaam" required autofocus autocomplete="username"></div>
+    <div class="veld"><label for="w">Wachtwoord</label><input id="w" name="wachtwoord" type="password" required autocomplete="current-password"></div>
+    <button class="primair" type="submit">Inloggen</button>
+  </form>
+</div>
+<p class="hulp rechts">Boekhouding Medialan</p>
+<%- include('../partials/voet') %>

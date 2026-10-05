@@ -1,0 +1,56 @@
+<%- include('partials/kop') %>
+<h1>Overzicht</h1>
+
+<% if (herstel) { %><div class="melding let">Er staat een herstel klaar (<%= herstel.bron %>). Herstart de app/container om het uit te voeren.</div><% } %>
+<% if (backupOud) { %><div class="melding fout">Let op: de laatste backup is ouder dan 2 dagen<%= laatsteBackup ? '' : ' (er is nog geen backup)' %>. <a href="/instellingen#backups">Bekijk backups</a></div><% } %>
+<% const fouten = taken.filter(t => t.laatste_fout && !t.naam.endsWith('-planner') && (!t.laatst_gelukt || t.laatste_fout.slice(0,24) > t.laatst_gelukt)); %>
+<% if (fouten.length) { %>
+  <div class="melding fout">Mislukte achtergrondtaken:
+    <ul><% fouten.forEach(t => { %><li><strong><%= t.naam %></strong>: <%= t.laatste_fout %></li><% }) %></ul>
+  </div>
+<% } %>
+<% if (externUit) { %><div class="melding fout">Externe backups staan nog uit: kies een versleutelingssleutel onder <a href="/instellingen#backup">Instellingen → Backupbeveiliging</a>.</div><% } %>
+<% if (nogInTeStellen.length) { %><div class="melding info">Nog niet gekoppeld: <%= nogInTeStellen.join(', ') %>. <a href="/instellingen">Naar Instellingen</a></div><% } %>
+<% if (outlook && outlook.status !== 'gekoppeld') { %><div class="melding let">Outlook is niet gekoppeld. <a href="/instellingen#outlook">Koppel Outlook</a> om facturen automatisch op te halen.</div><% } %>
+
+<div class="tegels">
+  <div class="tegel"><div class="label">Omzet <%= kwartaalId %> (excl.)</div><div class="waarde"><%= euro(c.omzetKwartaal) %></div></div>
+  <div class="tegel"><div class="label">Kosten <%= kwartaalId %> (excl.)</div><div class="waarde"><%= euro(c.kostenKwartaal) %></div></div>
+  <div class="tegel"><div class="label">Resultaat <%= kwartaalId %></div><div class="waarde <%= c.omzetKwartaal - c.kostenKwartaal < 0 ? 'negatief' : '' %>"><%= euro(c.omzetKwartaal - c.kostenKwartaal) %></div></div>
+  <div class="tegel"><a href="/btw/<%= kwartaalId %>"><div class="label">BTW <%= kwartaalId %> (<%= c.btwKwartaal >= 0 ? 'te betalen' : 'terug' %>)</div><div class="waarde"><%= euro(Math.abs(c.btwKwartaal)) %></div></a></div>
+</div>
+
+<div class="tegels">
+  <div class="tegel"><a href="/inkoop"><div class="label">Te beoordelen facturen</div><div class="waarde"><%= c.teBeoordelen %></div></a><% if (c.aiFouten) { %><div class="hulp"><%= c.aiFouten %> met AI-fout</div><% } %></div>
+  <div class="tegel"><a href="/bank/afletteren"><div class="label">Af te letteren transacties</div><div class="waarde"><%= c.openTransacties %></div></a></div>
+  <div class="tegel"><a href="/bank/ontbrekend"><div class="label">Afschrijvingen zonder factuur</div><div class="waarde"><%= ontbrekend %></div></a></div>
+  <div class="tegel"><a href="/rapportages#debiteuren"><div class="label">Te ontvangen (<%= c.debiteurenAantal %>)</div><div class="waarde"><%= euro(c.debiteuren) %></div></a></div>
+  <div class="tegel"><a href="/rapportages#crediteuren"><div class="label">Te betalen (<%= c.crediteurenAantal %>)</div><div class="waarde"><%= euro(c.crediteuren) %></div></a><% if (c.vervallenCrediteuren) { %><div class="hulp negatief"><%= c.vervallenCrediteuren %> vervallen</div><% } %></div>
+</div>
+
+<div class="kolommen">
+  <div class="paneel">
+    <h3 class="mb0">Bank</h3>
+    <% if (!c.banksaldo.length) { %><p class="hulp">Nog geen bankrekening. <a href="/bank">Voeg je N26-rekening toe</a>.</p><% } %>
+    <% c.banksaldo.forEach(b => { %>
+      <p><strong><%= b.naam %></strong>: <%= euro(b.saldo) %><br><span class="hulp">laatste transactie: <%= b.laatsteDatum ? nlDatum(b.laatsteDatum) : '–' %></span></p>
+    <% }) %>
+    <a class="knop klein" href="/import">CSV importeren</a>
+  </div>
+  <div class="paneel">
+    <h3 class="mb0">Backups</h3>
+    <p><% if (laatsteBackup) { %>Laatste: <%= nlTijdstip(laatsteBackup.datum.toISOString()) %><% } else { %>Nog geen backup<% } %></p>
+    <% const t = taken.find(t => t.naam === 'testherstel'); %>
+    <p class="hulp">Testherstel: <%= t && t.laatst_gelukt ? nlTijdstip(t.laatst_gelukt) + ' – ' + (t.melding || 'OK') : 'nog niet uitgevoerd' %></p>
+    <a class="knop klein" href="/instellingen#backups">Beheren</a>
+  </div>
+  <div class="paneel">
+    <h3 class="mb0">Koppelingen</h3>
+    <% const st = (n) => taken.find(t => t.naam === n); %>
+    <% [['outlook','Outlook'],['mollie','Mollie'],['ai','AI-uitlezen']].forEach(([n, l]) => { const s = st(n); %>
+      <p class="mb0"><strong><%= l %></strong>: <span class="hulp"><%= s && s.laatst_gelukt ? nlTijdstip(s.laatst_gelukt) + (s.melding ? ' – ' + s.melding : '') : 'nog niet gedraaid' %></span></p>
+    <% }) %>
+    <% if (c.mailZonderBijlage) { %><p class="hulp"><%= c.mailZonderBijlage %> e-mail(s) zonder PDF-bijlage (laatste 30 dagen) – controleer of daar een downloadlink in stond.</p><% } %>
+  </div>
+</div>
+<%- include('partials/voet') %>

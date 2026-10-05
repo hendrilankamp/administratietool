@@ -1,0 +1,78 @@
+<%- include('../partials/kop') %>
+<% const mollie = f.bron === 'mollie'; const geboekt = f.status === 'geboekt'; %>
+<div class="acties mb0"><a href="/verkoop">← Verkoopfacturen</a></div>
+<h1>Verkoopfactuur <%= f.factuurnummer || ('#' + f.id) %> <%- include('../partials/betaalstatus', { f }) %></h1>
+<% if (mollie) { %><div class="melding info">Deze factuur komt uit Mollie (status: <strong><%= f.mollie_status %></strong><%= f.mollie_betaald_op ? ', betaald op ' + nlDatum(f.mollie_betaald_op) : '' %>). Wijzig de factuur in Mollie; hier kun je alleen de categorieën aanpassen.</div><% } %>
+
+<div class="split">
+  <div>
+    <form method="post" action="/verkoop/<%= f.id %>" class="paneel">
+      <%- include('../partials/csrf') %>
+      <% if (mollie) { %>
+        <p><strong>Klant:</strong> <% if (relatie) { %><a href="/relaties/<%= relatie.id %>"><%= relatie.naam %></a><% } else { %>—<% } %><br>
+           <strong>Factuurdatum:</strong> <%= nlDatum(f.factuurdatum) %> · <strong>Vervaldatum:</strong> <%= nlDatum(f.vervaldatum) %></p>
+        <div class="tabel-wrap">
+          <table>
+            <thead><tr><th>Omschrijving</th><th>Categorie</th><th>BTW</th><th class="bedrag">Excl.</th><th class="bedrag">BTW</th></tr></thead>
+            <tbody>
+            <% f.regels.forEach(r => { %>
+              <tr>
+                <td><%= r.omschrijving %></td>
+                <td><select name="categorie[<%= r.id %>]"><option value="">–</option><% categorieen.forEach(c => { %><option value="<%= c.id %>" <%= r.categorie_id === c.id ? 'selected' : '' %>><%= c.naam %></option><% }) %></select></td>
+                <td><%= r.btw_code %></td>
+                <td class="bedrag"><%= euro(r.bedrag_excl) %></td>
+                <td class="bedrag"><%= euro(r.btw_bedrag) %></td>
+              </tr>
+            <% }) %>
+            </tbody>
+            <tfoot><tr><td colspan="3" class="rechts">Totaal incl. <%= euro(f.totaal_incl) %></td><td class="bedrag"><%= euro(f.totaal_excl) %></td><td class="bedrag"><%= euro(f.totaal_btw) %></td></tr></tfoot>
+          </table>
+        </div>
+        <button type="submit" class="primair">Categorieën opslaan</button>
+      <% } else { %>
+        <div class="rij">
+          <div><label for="rel">Klant</label>
+            <select id="rel" name="relatie_id"><option value="">– kies klant –</option><% klanten.forEach(k => { %><option value="<%= k.id %>" <%= f.relatie_id === k.id ? 'selected' : '' %>><%= k.naam %></option><% }) %></select></div>
+          <div class="smal"><label>&nbsp;</label><a class="knop" href="/relaties/nieuw?type=klant&amp;terug=/verkoop/<%= f.id %>">+ Nieuwe klant</a></div>
+        </div>
+        <div class="rij mt1">
+          <div><label for="nr">Factuurnummer</label><input id="nr" name="factuurnummer" value="<%= f.factuurnummer || '' %>"></div>
+          <div><label for="fd">Factuurdatum</label><input id="fd" type="date" name="factuurdatum" value="<%= f.factuurdatum || '' %>"></div>
+          <div><label for="vd">Vervaldatum</label><input id="vd" type="date" name="vervaldatum" value="<%= f.vervaldatum || '' %>"></div>
+        </div>
+        <div class="veld mt1"><label for="om">Omschrijving</label><input id="om" name="omschrijving" value="<%= f.omschrijving || '' %>"></div>
+        <h3>Regels</h3>
+        <%- include('../partials/regels', { regels: f.regels, categorieen, btwCodes, bewerkbaar: true }) %>
+        <div class="acties">
+          <% if (!geboekt) { %><button class="primair" type="submit" name="actie" value="boeken">Boeken</button><button type="submit" name="actie" value="opslaan">Opslaan als concept</button>
+          <% } else { %><button class="primair" type="submit" name="actie" value="opslaan">Wijzigingen opslaan</button><% } %>
+        </div>
+        <p class="hulp">Deze app maakt zelf geen factuur-PDF; leg hier verkoopfacturen vast die je buiten Mollie hebt verstuurd.</p>
+      <% } %>
+    </form>
+
+    <div class="paneel">
+      <h3 class="mb0">Ontvangsten</h3>
+      <% if (koppelingen.length) { %><ul><% koppelingen.forEach(k => { %><li><a href="/bank/transacties/<%= k.transactie_id %>"><%= nlDatum(k.transactie.boekdatum) %> – <%= k.transactie.tegenpartij_naam || '' %></a>: <%= euro(k.bedrag) %></li><% }) %></ul><% } %>
+      <% if (geboekt) { %>
+        <p>Ontvangen via bank: <%= euro(f.betaald_bank) %> · Openstaand (bank): <strong><%= euro(f.totaal_incl - f.betaald_bank) %></strong></p>
+        <% if (f.betaald_handmatig_op) { %>
+          <form method="post" action="/verkoop/<%= f.id %>/betaald" class="inline"><%- include('../partials/csrf') %><input type="hidden" name="ongedaan" value="1">Handmatig ontvangen op <%= nlDatum(f.betaald_handmatig_op) %> <button class="klein" type="submit">ongedaan maken</button></form>
+        <% } else if (f.betaalstatus !== 'betaald') { %>
+          <form method="post" action="/verkoop/<%= f.id %>/betaald" class="rij"><%- include('../partials/csrf') %>
+            <div class="smal"><label>Handmatig ontvangen (bv. contant)</label><input type="date" name="datum" required></div>
+            <div class="smal"><button type="submit">Markeer ontvangen</button></div>
+          </form>
+        <% } %>
+      <% } %>
+    </div>
+    <% if (!geboekt && !mollie) { %><form method="post" action="/verkoop/<%= f.id %>/verwijderen" data-bevestig="Concept verwijderen?"><%- include('../partials/csrf') %><button class="gevaar" type="submit">Concept verwijderen</button></form><% } %>
+  </div>
+  <div class="voorbeeld">
+    <% if (f.bijlage_sha256) { %>
+      <iframe src="/bijlagen/<%= f.bijlage_sha256 %>" title="Factuur"></iframe>
+      <p class="hulp"><a href="/bijlagen/<%= f.bijlage_sha256 %>?download=1">Downloaden</a></p>
+    <% } else { %><div class="paneel zacht">Geen PDF beschikbaar.</div><% } %>
+  </div>
+</div>
+<%- include('../partials/voet') %>

@@ -1,0 +1,61 @@
+<%- include('../partials/kop') %>
+<h1>Bankrekeningen</h1>
+<div class="acties">
+  <a class="knop primair" href="/import">CSV importeren</a>
+  <a class="knop" href="/bank/afletteren">Afletteren (<%= aantalOpen %> open)</a>
+  <a class="knop" href="/bank/transacties">Alle transacties</a>
+</div>
+
+<% rekeningen.forEach(rk => { %>
+  <div class="paneel">
+    <h2 class="mb0"><%= rk.naam %> <span class="hulp mono"><%= rk.iban %></span></h2>
+    <p>Berekend saldo: <strong><%= euro(rk.saldo) %></strong> <span class="hulp">(beginsaldo <%= euro(rk.beginsaldo) %> op <%= nlDatum(rk.begindatum) %> + geïmporteerde transacties)</span></p>
+    <form method="post" action="/bank/rekeningen/<%= rk.id %>/saldo" class="rij">
+      <%- include('../partials/csrf') %>
+      <div class="smal"><label>Saldo volgens N26-app op</label><input type="date" name="datum" value="<%= vandaag %>" required></div>
+      <div class="smal"><label>Saldo</label><input class="bedrag" name="saldo" required inputmode="decimal" placeholder="0,00"></div>
+      <div class="smal"><button type="submit">Saldo controleren</button></div>
+    </form>
+    <% if (rk.controles.length) { %>
+      <div class="tabel-wrap mt1"><table>
+        <thead><tr><th>Datum</th><th class="bedrag">Volgens bank</th><th class="bedrag">Berekend</th><th class="bedrag">Verschil</th></tr></thead>
+        <tbody><% rk.controles.forEach(c => { %><tr><td><%= nlDatum(c.datum) %></td><td class="bedrag"><%= euro(c.saldo) %></td><td class="bedrag"><%= euro(c.berekend) %></td><td class="bedrag"><% if (c.verschil === 0) { %><span class="label-status ok">klopt</span><% } else { %><span class="label-status fout"><%= euro(c.verschil) %></span><% } %></td></tr><% }) %></tbody>
+      </table></div>
+      <p class="hulp">Een verschil betekent meestal dat er transacties ontbreken (import niet compleet) of dat het beginsaldo niet klopt.</p>
+    <% } %>
+    <details><summary>Rekening wijzigen</summary>
+      <form method="post" action="/bank/rekeningen" class="rij mt1">
+        <%- include('../partials/csrf') %><input type="hidden" name="id" value="<%= rk.id %>">
+        <div><label>Naam</label><input name="naam" value="<%= rk.naam %>" required></div>
+        <div><label>IBAN</label><input name="iban" value="<%= rk.iban %>" required></div>
+        <div class="smal"><label>Bank</label><input name="bank" value="<%= rk.bank || '' %>"></div>
+        <div class="smal"><label>Beginsaldo</label><input class="bedrag" name="beginsaldo" value="<%= invoerBedrag(rk.beginsaldo) %>"></div>
+        <div class="smal"><label>Op datum (eind van de dag)</label><input type="date" name="begindatum" value="<%= rk.begindatum %>" required></div>
+        <div class="smal"><button type="submit">Opslaan</button></div>
+      </form>
+    </details>
+  </div>
+<% }) %>
+
+<div class="paneel">
+  <h2 class="mb0">Rekening toevoegen</h2>
+  <p class="hulp">Beginsaldo = het saldo aan het eind van de dag vóór je eerste geïmporteerde transactie.</p>
+  <form method="post" action="/bank/rekeningen" class="rij">
+    <%- include('../partials/csrf') %>
+    <div><label>Naam</label><input name="naam" value="N26 Zakelijk" required></div>
+    <div><label>IBAN</label><input name="iban" required placeholder="DE.. / NL.."></div>
+    <div class="smal"><label>Bank</label><input name="bank" value="N26"></div>
+    <div class="smal"><label>Beginsaldo</label><input class="bedrag" name="beginsaldo" value="0,00"></div>
+    <div class="smal"><label>Op datum</label><input type="date" name="begindatum" required></div>
+    <div class="smal"><button class="primair" type="submit">Toevoegen</button></div>
+  </form>
+</div>
+
+<% if (imports.length) { %>
+  <h2>Laatste imports</h2>
+  <div class="tabel-wrap"><table>
+    <thead><tr><th>Datum</th><th>Bestand</th><th>Profiel</th><th>Rekening</th><th class="bedrag">Nieuw</th><th class="bedrag">Dubbel</th><th class="bedrag">Fout</th></tr></thead>
+    <tbody><% imports.forEach(b => { %><tr><td><%= nlTijdstip(b.aangemaakt_op) %></td><td><%= b.bestandsnaam %><%= b.teruggedraaid_op ? ' (teruggedraaid)' : '' %></td><td><%= b.profiel_naam %></td><td><%= b.rekening || '' %></td><td class="bedrag"><%= b.aantal_nieuw %></td><td class="bedrag"><%= b.aantal_dubbel %></td><td class="bedrag"><%= b.aantal_fout %></td></tr><% }) %></tbody>
+  </table></div>
+<% } %>
+<%- include('../partials/voet') %>

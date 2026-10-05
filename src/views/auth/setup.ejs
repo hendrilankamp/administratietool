@@ -1,0 +1,14 @@
+<%- include('../partials/kop') %>
+<div class="paneel">
+  <h1>Eerste gebruiker aanmaken</h1>
+  <p class="hulp">Het eenmalige setup-token staat in de log van de app/container (Container Manager → container → Log).</p>
+  <form method="post" action="/setup">
+    <%- include('../partials/csrf') %>
+    <div class="veld"><label for="t">Setup-token</label><input id="t" name="token" required autocomplete="off"></div>
+    <div class="veld"><label for="g">Gebruikersnaam</label><input id="g" name="gebruikersnaam" required pattern="[A-Za-z0-9._@\-]{3,50}" autocomplete="username"></div>
+    <div class="veld"><label for="w">Wachtwoord (minimaal 12 tekens)</label><input id="w" name="wachtwoord" type="password" minlength="12" required autocomplete="new-password"></div>
+    <div class="veld"><label for="w2">Herhaal wachtwoord</label><input id="w2" name="wachtwoord2" type="password" minlength="12" required autocomplete="new-password"></div>
+    <button class="primair" type="submit">Aanmaken en 2FA instellen</button>
+  </form>
+</div>
+<%- include('../partials/voet') %>
