@@ -29,9 +29,19 @@
           <a class="knop" href="/relaties/nieuw?type=leverancier&amp;terug=/inkoop/<%= f.id %>">+ Nieuwe leverancier</a>
         </div>
       </div>
-      <% if (voorstel && !f.relatie_id) { %>
-        <div class="melding info">AI herkende: <strong><%= voorstel.leverancier.naam %></strong><%= voorstel.leverancier.btw_nummer ? ' (' + voorstel.leverancier.btw_nummer + ')' : '' %>.
-          <button type="submit" form="maak-lev" class="klein primair">Aanmaken als leverancier</button></div>
+      <% if (voorstel && !f.relatie_id) { const l = voorstel.leverancier; %>
+        <div class="melding info">
+          <strong>Nieuwe leverancier op deze factuur:</strong> <%= l.naam %><br>
+          <span class="klein"><%= [l.btw_nummer && 'BTW ' + l.btw_nummer, l.kvk && 'KvK ' + l.kvk, l.iban, l.email, [l.adres, l.postcode, l.plaats].filter(Boolean).join(' '), l.land].filter(Boolean).join(' · ') %></span>
+          <div class="acties mb0">
+            <button type="submit" form="maak-lev" class="klein primair">Leverancier aanmaken</button>
+            <a class="knop klein" href="/relaties/nieuw?uit_factuur=<%= f.id %>">Eerst gegevens controleren</a>
+          </div>
+        </div>
+      <% } %>
+      <% if (aanvulling.length) { %>
+        <div class="melding info">Op de factuur staan gegevens die nog niet bij <strong><%= relatie.naam %></strong> bekend zijn: <%= aanvulling.join(', ') %>.
+          <button type="submit" form="vul-lev" class="klein">Leverancier aanvullen</button></div>
       <% } %>
       <div class="rij mt1">
         <div><label for="nr">Factuurnummer</label><input id="nr" name="factuurnummer" value="<%= f.factuurnummer || '' %>"></div>
@@ -55,6 +65,9 @@
 
     <% if (voorstel && !f.relatie_id) { %>
       <form id="maak-lev" method="post" action="/inkoop/<%= f.id %>/leverancier-uit-voorstel" class="verborgen"><%- include('../partials/csrf') %></form>
+    <% } %>
+    <% if (aanvulling.length) { %>
+      <form id="vul-lev" method="post" action="/inkoop/<%= f.id %>/leverancier-aanvullen" class="verborgen"><%- include('../partials/csrf') %></form>
     <% } %>
 
     <div class="paneel">

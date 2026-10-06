@@ -8,6 +8,7 @@ import { btwCodes, eisOpenPeriode } from "../../modules/btw/service.ts";
 import { factuurLijst, haalFactuur, nieuweInkoopfactuur, verwijderFactuur, werkFactuurBij, zetHandmatigBetaald } from "../../modules/facturen/service.ts";
 import { categorieen, haalRelatie, relaties, slaRelatieOp } from "../../modules/relaties/service.ts";
 import { haalTransactie } from "../../modules/bank/service.ts";
+import { aanvullingen, koppelLeverancierAanFactuur, koppelOnbekendeLeveranciers, leverancierVelden, VELD_NAAM, vulLeverancierAan } from "../../modules/facturen/leverancier-uit-factuur.ts";
 import { csrfNaUpload } from "../sessie.ts";
 import { datum, geheel, idParam, klaar, lijst, regelsUitFormulier, render, tekst } from "../render.ts";
 import type { Diensten } from "../diensten.ts";
@@ -102,6 +103,11 @@ export function inkoopRouter(ctx: Ctx, diensten: Diensten): Router {
       email,
       koppelingen,
       relatie: f.relatie_id ? haalRelatie(ctx, f.relatie_id) : null,
+      aanvulling: (() => {
+        const rel = f.relatie_id ? haalRelatie(ctx, f.relatie_id) : null;
+        if (!rel || !voorstel || f.status !== "te_beoordelen") return [];
+        return Object.keys(aanvullingen(ctx, rel, voorstel)).map((k) => VELD_NAAM[k as keyof typeof VELD_NAAM]);
+      })(),
       leveranciers: relaties(ctx, { type: "leverancier" }),
       categorieen: categorieen(ctx).filter((c) => c.soort !== "omzet"),
       btwCodes: btwCodes(ctx.db).filter((c) => c.soort !== "verkoop"),
@@ -145,32 +151,25 @@ export function inkoopRouter(ctx: Ctx, diensten: Diensten): Router {
     klaar(ctx, req, res, `/inkoop/${id}`, "AI-uitlezen gestart; vernieuw de pagina over enkele seconden.");
   });
 
+  /** Leverancier met één klik aanmaken uit het AI-voorstel en aan de factuur koppelen. */
   r.post("/:id/leverancier-uit-voorstel", (req, res) => {
     const id = idParam(req.params.id);
     const f = haalFactuur(ctx, "inkoop", id);
     if (!f?.ai_voorstel) throw new GebruikersFout("Geen AI-voorstel beschikbaar");
     const v = JSON.parse(f.ai_voorstel) as AiVoorstel;
-    const catId = f.regels[0]?.categorie_id ?? null;
-    const relId = slaRelatieOp(
-      ctx,
-      null,
-      {
-        naam: v.leverancier.naam,
-        type: "leverancier",
-        btw_nummer: v.leverancier.btw_nummer,
-        kvk: v.leverancier.kvk,
-        iban: v.leverancier.iban,
-        email: v.leverancier.email && /@/.test(v.leverancier.email) ? v.leverancier.email : null,
-        adres: v.leverancier.adres,
-        postcode: v.leverancier.postcode,
-        plaats: v.leverancier.plaats,
-        land: v.leverancier.land && /^[A-Za-z]{2}$/.test(v.leverancier.land) ? v.leverancier.land : "NL",
-        standaard_categorie_id: catId,
-      },
-      gebruiker(req),
-    );
-    ctx.db.run("UPDATE inkoopfacturen SET relatie_id = ? WHERE id = ?", [relId, id]);
-    klaar(ctx, req, res, `/inkoop/${id}`, `Leverancier "${v.leverancier.naam}" aangemaakt.`);
+    const relId = slaRelatieOp(ctx, null, leverancierVelden(ctx, v, f.regels), gebruiker(req));
+    koppelLeverancierAanFactuur(ctx, id, relId);
+    const n = koppelOnbekendeLeveranciers(ctx);
+    klaar(ctx, req, res, `/inkoop/${id}`, `Leverancier "${v.leverancier.naam}" aangemaakt en gekoppeld.${n ? ` Ook ${n} andere factuur/facturen gekoppeld.` : ""}`);
+  });
+
+  /** Lege velden van de gekoppelde leverancier aanvullen met gegevens van de factuur. */
+  r.post("/:id/leverancier-aanvullen", (req, res) => {
+    const id = idParam(req.params.id);
+    const f = haalFactuur(ctx, "inkoop", id);
+    if (!f?.ai_voorstel || !f.relatie_id) throw new GebruikersFout("Geen leverancier of AI-voorstel");
+    const velden = vulLeverancierAan(ctx, f.relatie_id, JSON.parse(f.ai_voorstel) as AiVoorstel, gebruiker(req));
+    klaar(ctx, req, res, `/inkoop/${id}`, velden.length ? `Leverancier aangevuld: ${velden.join(", ")}.` : "Niets aan te vullen.");
   });
 
   r.post("/:id/betaald", (req, res) => {

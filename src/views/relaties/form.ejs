@@ -4,6 +4,10 @@
 <form method="post" action="<%= r.id ? '/relaties/' + r.id : '/relaties/nieuw' %>" class="paneel">
   <%- include('../partials/csrf') %>
   <% if (!r.id && typeof query.terug === 'string') { %><input type="hidden" name="terug" value="<%= query.terug %>"><% } %>
+  <% if (typeof uitFactuur !== 'undefined' && uitFactuur) { %>
+    <input type="hidden" name="koppel_factuur" value="<%= uitFactuur %>">
+    <div class="melding info">Ingevuld met de gegevens die Claude uit <a href="/inkoop/<%= uitFactuur %>">de factuur</a> haalde. Controleer ze en klik op Opslaan; de leverancier wordt dan direct aan de factuur gekoppeld.</div>
+  <% } %>
   <div class="rij">
     <div><label for="naam">Naam *</label><input id="naam" name="naam" value="<%= r.naam || '' %>" required maxlength="200"></div>
     <div class="smal"><label for="type">Type</label>
