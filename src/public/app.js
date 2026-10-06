@@ -130,6 +130,22 @@
     }, sec * 1000);
   }
 
+  // Hele tabelrij klikbaar (behalve op invoervelden, knoppen en links zelf)
+  document.addEventListener("click", function (e) {
+    var tr = e.target.closest && e.target.closest("tr[data-href]");
+    if (!tr || e.target.closest("a, button, input, select, label, textarea")) return;
+    if (window.getSelection && String(window.getSelection())) return; // tekst selecteren blijft mogelijk
+    window.location.href = tr.getAttribute("data-href");
+  });
+
+  // "Alles selecteren"-vinkje
+  Array.prototype.forEach.call(document.querySelectorAll("[data-alles-selecteren]"), function (alle) {
+    alle.addEventListener("change", function () {
+      var tabel = alle.closest("table");
+      Array.prototype.forEach.call(tabel.querySelectorAll('tbody input[type="checkbox"]'), function (c) { c.checked = alle.checked; });
+    });
+  });
+
   // Bedragmodus in de CSV-mapping
   var modus = document.querySelector("select[name=bedragModus]");
   if (modus) {

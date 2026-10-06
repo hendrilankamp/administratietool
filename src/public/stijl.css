@@ -77,6 +77,7 @@ main { padding: 1.5rem 2rem 4rem; max-width: 1400px; }
 table { width: 100%; border-collapse: collapse; background: var(--paneel); }
 th, td { padding: 0.45rem 0.6rem; border-bottom: 1px solid var(--rand); text-align: left; vertical-align: top; }
 th { font-size: 0.8rem; color: var(--zacht); font-weight: 600; background: var(--bg); position: sticky; top: 0; }
+table.klikbaar tbody tr[data-href] { cursor: pointer; }
 tr:hover td { background: color-mix(in srgb, var(--info-bg) 40%, transparent); }
 td.bedrag, th.bedrag { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tabel-wrap { overflow-x: auto; border: 1px solid var(--rand); border-radius: var(--radius); margin-bottom: 1rem; }

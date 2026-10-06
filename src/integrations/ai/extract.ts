@@ -7,6 +7,7 @@ import { leesBijlage } from "../../lib/bijlagen.ts";
 import { isGeldigeDatum } from "../../lib/datum.ts";
 import { btwCodeMap, btwAfwijking } from "../../modules/btw/service.ts";
 import { categorieen, zoekRelatieMatch } from "../../modules/relaties/service.ts";
+import { isEigenLeverancier, isEigenOnderwerp, negeerEigenFactuur, ruimEigenFacturenOp } from "../../modules/facturen/eigen.ts";
 
 const EU_LANDEN = new Set([
   "AT", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "ES", "FI", "FR", "GR", "EL", "HR", "HU", "IE", "IT", "LT", "LU", "LV", "MT", "PL", "PT", "RO", "SE", "SI", "SK",
@@ -14,6 +15,49 @@ const EU_LANDEN = new Set([
 
 /** Modellen die de server-side fallback ("default") ondersteunen. */
 const FALLBACK_MODELLEN = new Set(["claude-opus-5-5", "claude-opus-5", "claude-fable-5-1", "claude-sonnet-5-5"]);
+
+/** Te kiezen modellen met prijs in dollars per miljoen tokens (input / output). */
+export const AI_MODELLEN: { id: string; naam: string; input: number; output: number; effort: boolean }[] = [
+  { id: "claude-sonnet-5-5", naam: "Claude Sonnet 5.5 (aanbevolen)", input: 2, output: 10, effort: true },
+  { id: "claude-haiku-4-5", naam: "Claude Haiku 4.5 (goedkoopst, minder nauwkeurig)", input: 1, output: 5, effort: false },
+  { id: "claude-opus-5-5", naam: "Claude Opus 5.5 (duurst, meest nauwkeurig)", input: 4, output: 20, effort: true },
+];
+
+const modelInfo = (id: string) => AI_MODELLEN.find((m) => m.id === id) ?? { id, naam: id, input: 4, output: 20, effort: true };
+
+/** Geschatte kosten in miljoenste dollars. */
+export function kostenMicroUsd(model: string, inputTokens: number, outputTokens: number): number {
+  const m = modelInfo(model);
+  return Math.round(inputTokens * m.input + outputTokens * m.output);
+}
+
+/** Geschatte AI-kosten (dollars) in de kalendermaand van `nu`. */
+export function aiKostenMaand(ctx: Ctx, nu: Date = new Date()): { dollars: number; verzoeken: number; facturen: number } {
+  const begin = new Date(nu.getFullYear(), nu.getMonth(), 1).toISOString();
+  const r = ctx.db.get<{ k: number | null; n: number; f: number }>(
+    "SELECT SUM(kosten_micro_usd) AS k, COUNT(*) AS n, COUNT(DISTINCT factuur_id) AS f FROM ai_gebruik WHERE op >= ?",
+    [begin],
+  )!;
+  return { dollars: (r.k ?? 0) / 1_000_000, verzoeken: r.n, facturen: r.f };
+}
+
+export class AiLimietFout extends Error {}
+
+/** Gooit een AiLimietFout als de maandlimiet bereikt is. */
+export function controleerLimiet(ctx: Ctx): void {
+  const limiet = ctx.config.AI_LIMIET_MAAND;
+  if (limiet <= 0) throw new AiLimietFout("AI-uitlezen staat uit (maandlimiet is $0).");
+  const { dollars } = aiKostenMaand(ctx);
+  if (dollars >= limiet) throw new AiLimietFout(`Maandlimiet voor AI bereikt ($${dollars.toFixed(2)} van $${limiet.toFixed(2)}). Vul de factuur zelf in of verhoog de limiet onder Instellingen.`);
+}
+
+/** Telt (bij benadering) het aantal pagina's van een PDF zonder extra bibliotheek. */
+export function aantalPaginas(pdf: Buffer): number {
+  const tekst = pdf.toString("latin1");
+  const count = /\/Type\s*\/Pages\b[^]*?\/Count\s+(\d+)/.exec(tekst);
+  if (count) return Number(count[1]);
+  return (tekst.match(/\/Type\s*\/Page\b(?!s)/g) ?? []).length || 1;
+}
 
 function voorstelSchema(categorieNamen: [string, ...string[]]) {
   return z.object({
@@ -64,7 +108,7 @@ export function aiBeschikbaar(ctx: Ctx): boolean {
 }
 
 /** Roept Claude aan met het document en geeft een gevalideerd voorstel terug. */
-export async function vraagVoorstel(ctx: Ctx, data: Buffer, mime: string, client?: Anthropic): Promise<AiVoorstel> {
+export async function vraagVoorstel(ctx: Ctx, data: Buffer, mime: string, client?: Anthropic, factuurId?: number): Promise<AiVoorstel> {
   const namen = categorieen(ctx).filter((c) => c.soort !== "omzet").map((c) => c.naam);
   const schema = voorstelSchema(namen as [string, ...string[]]);
   const anthropic = client ?? new Anthropic({ apiKey: ctx.config.ANTHROPIC_API_KEY, maxRetries: 3 });
@@ -74,15 +118,38 @@ export async function vraagVoorstel(ctx: Ctx, data: Buffer, mime: string, client
       ? ({ type: "document", source: { type: "base64", media_type: "application/pdf", data: data.toString("base64") } } as const)
       : ({ type: "image", source: { type: "base64", media_type: mime as "image/png" | "image/jpeg", data: data.toString("base64") } } as const);
 
+  if (mime === "application/pdf") {
+    const paginas = aantalPaginas(data);
+    if (paginas > ctx.config.AI_MAX_PAGINAS) {
+      throw new AiLimietFout(`PDF heeft ${paginas} pagina's (maximum voor AI: ${ctx.config.AI_MAX_PAGINAS}); vul de factuur zelf in of verhoog het maximum onder Instellingen.`);
+    }
+  }
+  controleerLimiet(ctx);
+
   const fallback = FALLBACK_MODELLEN.has(model) ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const } : {};
+  // Effort 'low': factuuruitlezen is een eenvoudige taak; het model denkt dan nauwelijks na (minder tokens).
+  // Haiku 4.5 kent geen effort-parameter.
+  const outputConfig = modelInfo(model).effort
+    ? { effort: "low" as const, format: betaZodOutputFormat(schema) }
+    : { format: betaZodOutputFormat(schema) };
   const resp = await anthropic.beta.messages.parse({
     model,
-    max_tokens: 16000,
+    max_tokens: 8000,
     system: SYSTEEM,
-    output_config: { effort: "medium", format: betaZodOutputFormat(schema) },
+    output_config: outputConfig,
     messages: [{ role: "user", content: [document, { type: "text", text: "Lees deze factuur uit volgens het schema." }] }],
     ...fallback,
   });
+  const u = resp.usage;
+  const input = (u.input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0);
+  ctx.db.run("INSERT INTO ai_gebruik (factuur_id, model, input_tokens, output_tokens, kosten_micro_usd, gelukt) VALUES (?, ?, ?, ?, ?, ?)", [
+    factuurId ?? null,
+    model,
+    input,
+    u.output_tokens ?? 0,
+    kostenMicroUsd(model, input, u.output_tokens ?? 0),
+    resp.stop_reason === "end_turn" ? 1 : 0,
+  ]);
   if (resp.stop_reason === "refusal") throw new Error("De AI weigerde dit document te verwerken; vul de gegevens handmatig in.");
   if (resp.stop_reason === "max_tokens") throw new Error("Het AI-antwoord was te lang (afgebroken); vul de gegevens handmatig in.");
   if (!resp.parsed_output) throw new Error("Het AI-antwoord kon niet worden gelezen.");
@@ -163,8 +230,15 @@ export function vertaalVoorstel(ctx: Ctx, v: AiVoorstel) {
 
 /** Verwerkt één inkoopfactuur: AI-voorstel ophalen en het formulier voorinvullen. Overschrijft nooit een geboekte factuur. */
 export async function leesFactuurUit(ctx: Ctx, factuurId: number, client?: Anthropic): Promise<void> {
-  const f = ctx.db.get<{ id: number; status: string; bijlage_sha256: string | null }>("SELECT id, status, bijlage_sha256 FROM inkoopfacturen WHERE id = ?", [factuurId]);
+  const f = ctx.db.get<{ id: number; status: string; bijlage_sha256: string | null; omschrijving: string | null }>(
+    "SELECT id, status, bijlage_sha256, omschrijving FROM inkoopfacturen WHERE id = ?",
+    [factuurId],
+  );
   if (!f || f.status !== "te_beoordelen" || !f.bijlage_sha256) return;
+  if (isEigenOnderwerp(ctx, f.omschrijving)) {
+    negeerEigenFactuur(ctx, factuurId, "onderwerp: eigen factuur");
+    return;
+  }
   const bijlage = leesBijlage(ctx, f.bijlage_sha256);
   if (!bijlage) {
     ctx.db.run("UPDATE inkoopfacturen SET ai_status = 'fout', ai_melding = 'Bijlage niet gevonden' WHERE id = ?", [factuurId]);
@@ -172,7 +246,11 @@ export async function leesFactuurUit(ctx: Ctx, factuurId: number, client?: Anthr
   }
   ctx.db.run("UPDATE inkoopfacturen SET ai_status = 'bezig' WHERE id = ?", [factuurId]);
   try {
-    const voorstel = await vraagVoorstel(ctx, bijlage.data, bijlage.mime, client);
+    const voorstel = await vraagVoorstel(ctx, bijlage.data, bijlage.mime, client, factuurId);
+    if (isEigenLeverancier(ctx, voorstel.leverancier)) {
+      negeerEigenFactuur(ctx, factuurId, `AI: leverancier is eigen bedrijf (${voorstel.leverancier.naam})`);
+      return;
+    }
     const v = vertaalVoorstel(ctx, voorstel);
     ctx.db.tx(() => {
       const nog = ctx.db.get<{ status: string }>("SELECT status FROM inkoopfacturen WHERE id = ?", [factuurId]);
@@ -201,15 +279,18 @@ export async function leesFactuurUit(ctx: Ctx, factuurId: number, client?: Anthr
     });
   } catch (e) {
     const bericht = e instanceof Anthropic.APIError ? `AI-dienst: ${e.status ?? ""} ${e.message}` : e instanceof Error ? e.message : String(e);
-    ctx.log.warn(`AI-uitlezen factuur ${factuurId} mislukt: ${bericht}`);
-    ctx.db.run("UPDATE inkoopfacturen SET ai_status = 'fout', ai_melding = ? WHERE id = ?", [bericht.slice(0, 1000), factuurId]);
+    // Limiet/te groot: geen fout maar 'overgeslagen', zodat je de factuur zelf invult
+    const status = e instanceof AiLimietFout ? "overgeslagen" : "fout";
+    if (status === "fout") ctx.log.warn(`AI-uitlezen factuur ${factuurId} mislukt: ${bericht}`);
+    ctx.db.run("UPDATE inkoopfacturen SET ai_status = ?, ai_melding = ? WHERE id = ?", [status, bericht.slice(0, 1000), factuurId]);
   }
 }
 
 /** Verwerkt alle facturen in de AI-wachtrij, één voor één. */
 export async function verwerkAiWachtrij(ctx: Ctx): Promise<number> {
+  ruimEigenFacturenOp(ctx);
   if (!aiBeschikbaar(ctx)) return 0;
   const ids = ctx.db.all<{ id: number }>("SELECT id FROM inkoopfacturen WHERE ai_status = 'wachtrij' AND status = 'te_beoordelen' ORDER BY id LIMIT 20");
-  for (const { id } of ids) await leesFactuurUit(ctx, id);
+  for (const { id } of ids) await leesFactuurUit(ctx, id); // stopt per factuur netjes bij de maandlimiet
   return ids.length;
 }

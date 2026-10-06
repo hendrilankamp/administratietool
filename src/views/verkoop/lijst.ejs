@@ -14,12 +14,12 @@
   <div class="smal"><button type="submit">Filter</button></div>
 </form>
 <div class="tabel-wrap mt1">
-<table>
+<table class="klikbaar">
   <thead><tr><th>Datum</th><th>Factuurnr.</th><th>Klant</th><th>Bron</th><th class="bedrag">Excl.</th><th class="bedrag">Totaal</th><th class="bedrag">Open</th><th>Status</th></tr></thead>
   <tbody>
   <% if (!facturen.length) { %><tr><td colspan="8" class="zacht">Geen facturen.</td></tr><% } %>
   <% facturen.forEach(f => { %>
-    <tr>
+    <tr data-href="/verkoop/<%= f.id %>">
       <td class="nowrap"><%= nlDatum(f.factuurdatum) %></td>
       <td><a href="/verkoop/<%= f.id %>"><%= f.factuurnummer || ('#' + f.id) %></a></td>
       <td><%= f.relatie_naam || '—' %></td>

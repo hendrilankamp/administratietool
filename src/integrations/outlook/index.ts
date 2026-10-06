@@ -6,6 +6,7 @@ import { audit, GebruikersFout } from "../../lib/context.ts";
 import { ontsleutel, versleutel } from "../../lib/crypto.ts";
 import { bewaarBijlage, detecteerType, MAX_BIJLAGE } from "../../lib/bijlagen.ts";
 import { nieuweInkoopfactuur } from "../../modules/facturen/service.ts";
+import { isEigenOnderwerp } from "../../modules/facturen/eigen.ts";
 
 // Mail.ReadWrite.Shared: nodig om een gedeelde mailbox te lezen waar de ingelogde gebruiker toegang toe heeft
 const SCOPES = ["Mail.ReadWrite", "Mail.ReadWrite.Shared", "offline_access"];
@@ -262,6 +263,11 @@ async function verwerkBericht(ctx: Ctx, b: Bericht, res: MailResultaat): Promise
 
   let aantal = 0;
   const fouten: string[] = [];
+  if (isEigenOnderwerp(ctx, b.subject)) {
+    // Eigen verkoopfactuur (bcc / kopie van Mollie): niet bij de inkoop zetten
+    ctx.db.run("UPDATE email_berichten SET fout = ? WHERE id = ?", ["Eigen factuur; niet als inkoop verwerkt", berichtId]);
+    return;
+  }
   if (b.hasAttachments) {
     const lijst = await graph<{ value: Bijlage[] }>(ctx, `${mailbox(ctx)}/messages/${b.id}/attachments?$select=id,name,contentType,size,isInline`);
     for (const a of lijst.value) {

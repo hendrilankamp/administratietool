@@ -6,6 +6,7 @@ import { audit, GebruikersFout } from "../../lib/context.ts";
 import { controleerWachtwoord } from "../../lib/crypto.ts";
 import { bronVan, INSTELBAAR, slaInstellingenOp, type InstelSleutel, type Wijziging } from "../../lib/instellingen.ts";
 import { klaar, render, tekst } from "../render.ts";
+import { ruimEigenFacturenOp } from "../../modules/facturen/eigen.ts";
 
 /** Overzicht van alle koppel-instellingen voor de view (geheimen worden nooit teruggestuurd). */
 export function koppelingInfo(ctx: Ctx) {
@@ -36,7 +37,7 @@ export function koppelingenRoutes(ctx: Ctx, r: Router): void {
       }
       // Geheimen: leeg laten = ongewijzigd. Overige velden: leeg = terug naar standaard.
       if (t === null) return wijzigingen.push({ sleutel: k, waarde: INSTELBAAR[k].geheim ? undefined : null });
-      wijzigingen.push({ sleutel: k, waarde: soort === "getal" ? Number(t) : t });
+      wijzigingen.push({ sleutel: k, waarde: soort === "getal" ? Number(t.replace(",", ".")) : t });
     };
     if (sectie === "mollie") {
       veld("MOLLIE_TOKEN");
@@ -44,6 +45,12 @@ export function koppelingenRoutes(ctx: Ctx, r: Router): void {
     } else if (sectie === "ai") {
       veld("ANTHROPIC_API_KEY");
       veld("AI_MODEL");
+      veld("AI_LIMIET_MAAND", "getal");
+      veld("AI_MAX_PAGINAS", "getal");
+    } else if (sectie === "bedrijf") {
+      veld("EIGEN_NAAM");
+      veld("EIGEN_BTW");
+      veld("EIGEN_KVK");
     } else if (sectie === "outlook") {
       veld("MS_CLIENT_ID");
       veld("MS_TENANT_ID");
@@ -58,7 +65,12 @@ export function koppelingenRoutes(ctx: Ctx, r: Router): void {
       veld("BACKUP_UUR", "getal");
     } else throw new GebruikersFout("Onbekend onderdeel");
     slaInstellingenOp(ctx, wijzigingen, gebruiker(req));
-    klaar(ctx, req, res, `/instellingen#${sectie === "mailbox" ? "outlook" : sectie}`, "Instellingen opgeslagen.");
+    let extra = "";
+    if (sectie === "bedrijf") {
+      const n = ruimEigenFacturenOp(ctx);
+      if (n) extra = ` ${n} eigen factuur/facturen uit "te beoordelen" verwijderd.`;
+    }
+    klaar(ctx, req, res, `/instellingen#${sectie === "mailbox" ? "outlook" : sectie}`, `Instellingen opgeslagen.${extra}`);
   });
 
   r.post("/test/mollie", async (req, res) => {

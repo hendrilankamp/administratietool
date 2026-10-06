@@ -37,7 +37,15 @@ const schema = z.object({
 
   // Claude (AI-uitlezen)
   ANTHROPIC_API_KEY: optioneel,
-  AI_MODEL: z.string().default("claude-opus-5-5"),
+  AI_MODEL: z.string().default("claude-sonnet-5-5"),
+  // Maximale geschatte AI-kosten per kalendermaand in dollars (0 = AI uit) en maximaal aantal pagina's per PDF
+  AI_LIMIET_MAAND: z.coerce.number().min(0).max(10000).default(10),
+  AI_MAX_PAGINAS: z.coerce.number().int().min(1).max(100).default(10),
+
+  // Eigen bedrijf: om eigen (verkoop)facturen te herkennen die per e-mail binnenkomen (bv. in bcc)
+  EIGEN_NAAM: optioneel,
+  EIGEN_BTW: optioneel,
+  EIGEN_KVK: optioneel,
 
   // Mollie
   MOLLIE_TOKEN: optioneel,

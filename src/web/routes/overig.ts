@@ -7,7 +7,7 @@ import { kwartaalVan, parseKwartaalId, vandaag } from "../../lib/datum.ts";
 import { alleTaakStatussen, taakStatus } from "../../lib/taken.ts";
 import { lijstBackups, maakBackup } from "../../backup/maak.ts";
 import { bereidHerstelVoor, herstelKlaargezet } from "../../backup/herstel.ts";
-import { aiBeschikbaar } from "../../integrations/ai/extract.ts";
+import { AI_MODELLEN, aiBeschikbaar, aiKostenMaand } from "../../integrations/ai/extract.ts";
 import { koppelStatus, ontkoppel, outlookIngesteld, startKoppelen } from "../../integrations/outlook/index.ts";
 import { mollieIngesteld } from "../../integrations/mollie/index.ts";
 import { berekenAangifte, heropenPeriode, RUBRIEK_OMSCHRIJVING, sluitPeriode, zorgVoorPeriode } from "../../modules/btw/service.ts";
@@ -155,6 +155,9 @@ export function instellingenRouter(ctx: Ctx, diensten: Diensten): Router {
       taken: alleTaakStatussen(ctx),
       config: { mailbox: ctx.config.MS_MAILBOX, map: ctx.config.MS_MAP, verwerkt: ctx.config.MS_MAP_VERWERKT, poll: ctx.config.MS_POLL_MINUTEN, backupUur: ctx.config.BACKUP_UUR },
       k: koppelingInfo(ctx),
+      aiModellen: AI_MODELLEN,
+      aiDezeMaand: aiKostenMaand(ctx),
+      aiVorigeMaand: aiKostenMaand(ctx, new Date(new Date().getFullYear(), new Date().getMonth() - 1, 15)),
       appSecretAutomatisch: ctx.config.appSecretAutomatisch,
     });
   });

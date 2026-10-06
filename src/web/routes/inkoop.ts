@@ -9,7 +9,7 @@ import { factuurLijst, haalFactuur, nieuweInkoopfactuur, verwijderFactuur, werkF
 import { categorieen, haalRelatie, relaties, slaRelatieOp } from "../../modules/relaties/service.ts";
 import { haalTransactie } from "../../modules/bank/service.ts";
 import { csrfNaUpload } from "../sessie.ts";
-import { datum, geheel, idParam, klaar, regelsUitFormulier, render, tekst } from "../render.ts";
+import { datum, geheel, idParam, klaar, lijst, regelsUitFormulier, render, tekst } from "../render.ts";
 import type { Diensten } from "../diensten.ts";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_BIJLAGE, files: 20, fields: 20 } });
@@ -56,6 +56,24 @@ export function inkoopRouter(ctx: Ctx, diensten: Diensten): Router {
     }
     diensten.aiWachtrij();
     klaar(ctx, req, res, "/inkoop", `${nieuw} factuur/facturen toegevoegd.${meldingen.length ? ` ${meldingen.join("; ")}` : ""}`);
+  });
+
+  /** Meerdere te beoordelen items tegelijk weggooien (bv. geen factuur, of dubbel). */
+  r.post("/verwijderen-selectie", (req, res) => {
+    const ids = lijst<string>(req.body.ids).map(Number).filter((n) => Number.isInteger(n) && n > 0);
+    if (!ids.length) throw new GebruikersFout("Selecteer eerst één of meer facturen");
+    let n = 0;
+    const fouten: string[] = [];
+    for (const id of ids) {
+      try {
+        verwijderFactuur(ctx, "inkoop", id, gebruiker(req));
+        n++;
+      } catch (e) {
+        if (e instanceof GebruikersFout) fouten.push(`#${id}: ${e.message}`);
+        else throw e;
+      }
+    }
+    klaar(ctx, req, res, "/inkoop", `${n} verwijderd.${fouten.length ? ` Niet verwijderd: ${fouten.join("; ")}` : ""}`);
   });
 
   r.post("/nieuw", (req, res) => {

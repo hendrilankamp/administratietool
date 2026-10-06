@@ -10,6 +10,11 @@ import { ontsleutel, versleutel } from "./crypto.ts";
 export const INSTELBAAR = {
   ANTHROPIC_API_KEY: { geheim: true, schema: z.string().regex(/^sk-ant-[\w-]{10,}$/, "Een Anthropic API-sleutel begint met sk-ant-") },
   AI_MODEL: { geheim: false, schema: z.string().regex(/^claude-[a-z0-9.-]{3,60}$/, "Ongeldige modelnaam") },
+  AI_LIMIET_MAAND: { geheim: false, schema: z.number().min(0, "Limiet kan niet negatief zijn").max(10000) },
+  AI_MAX_PAGINAS: { geheim: false, schema: z.number().int().min(1).max(100) },
+  EIGEN_NAAM: { geheim: false, schema: z.string().trim().min(2).max(100) },
+  EIGEN_BTW: { geheim: false, schema: z.string().transform((s) => s.replace(/[\s.\-]/g, "").toUpperCase()).pipe(z.string().regex(/^[A-Z]{2}[0-9A-Z]{8,12}$/, "Ongeldig BTW-nummer")) },
+  EIGEN_KVK: { geheim: false, schema: z.string().regex(/^\d{8}$/, "KvK-nummer heeft 8 cijfers") },
   MOLLIE_TOKEN: { geheim: true, schema: z.string().regex(/^(access|live|test)_[\w]{10,}$/, "Een Mollie-token begint met access_, live_ of test_") },
   MOLLIE_TESTMODE: { geheim: false, schema: z.boolean() },
   MS_CLIENT_ID: { geheim: false, schema: z.guid("Toepassings-ID moet een GUID zijn (8-4-4-4-12 tekens, bv. 6496e63c-96ca-4862-a664-0fd54b21e9fe)") },

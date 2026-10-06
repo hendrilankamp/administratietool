@@ -30,24 +30,31 @@
 <% } %>
 <% if (facturen.some(f => f.ai_status === 'wachtrij' || f.ai_status === 'bezig')) { %><span data-vernieuw="6"></span><p class="hulp">AI is bezig met uitlezen; deze pagina vernieuwt automatisch.</p><% } %>
 
+<form method="post" action="/inkoop/verwijderen-selectie" data-bevestig="Geselecteerde facturen verwijderen? (De e-mail blijft in Outlook staan.)">
+<%- include('../partials/csrf') %>
+<% if (tab !== 'geboekt' && facturen.length) { %>
+  <div class="acties"><button class="klein gevaar" type="submit">Geselecteerde verwijderen</button><span class="hulp">Gebruik dit voor documenten die geen inkoopfactuur zijn.</span></div>
+<% } %>
 <div class="tabel-wrap mt1">
-<table>
-  <thead><tr><th>#</th><th>Datum</th><th>Leverancier</th><th>Factuurnr.</th><th>Omschrijving</th><th class="bedrag">Totaal</th><th>Status</th><% if (tab !== 'geboekt') { %><th>AI</th><% } %></tr></thead>
+<table class="klikbaar">
+  <thead><tr><% if (tab !== 'geboekt') { %><th><input type="checkbox" data-alles-selecteren title="Alles selecteren"></th><% } %><th>#</th><th>Datum</th><th>Leverancier</th><th>Factuurnr.</th><th>Omschrijving</th><th class="bedrag">Totaal</th><th>Status</th><% if (tab !== 'geboekt') { %><th>AI</th><% } %></tr></thead>
   <tbody>
-  <% if (!facturen.length) { %><tr><td colspan="8" class="zacht">Geen facturen.</td></tr><% } %>
-  <% facturen.forEach(f => { %>
-    <tr>
-      <td><a href="/inkoop/<%= f.id %>"><%= f.id %></a></td>
-      <td class="nowrap"><%= nlDatum(f.factuurdatum) %></td>
-      <td><a href="/inkoop/<%= f.id %>"><%= f.relatie_naam || '—' %></a></td>
-      <td><%= f.factuurnummer || '' %></td>
+  <% if (!facturen.length) { %><tr><td colspan="9" class="zacht">Geen facturen.</td></tr><% } %>
+  <% facturen.forEach(f => { const url = '/inkoop/' + f.id; %>
+    <tr data-href="<%= url %>">
+      <% if (tab !== 'geboekt') { %><td><input type="checkbox" name="ids[]" value="<%= f.id %>"></td><% } %>
+      <td><a href="<%= url %>"><%= f.id %></a></td>
+      <td class="nowrap"><a href="<%= url %>"><%= nlDatum(f.factuurdatum) || '—' %></a></td>
+      <td><a href="<%= url %>"><%= f.relatie_naam || (f.ai_voorstel ? (JSON.parse(f.ai_voorstel).leverancier || {}).naam || 'onbekend' : 'onbekend') %></a></td>
+      <td><a href="<%= url %>"><%= f.factuurnummer || '' %></a></td>
       <td class="zacht"><%= (f.omschrijving || '').slice(0, 60) %><%= f.bron === 'email' ? ' ✉' : '' %></td>
       <td class="bedrag"><%= euro(f.totaal_incl) %></td>
       <td><%- include('../partials/betaalstatus', { f }) %></td>
-      <% if (tab !== 'geboekt') { %><td><% if (f.ai_status === 'klaar') { %><span class="label-status <%= f.ai_melding ? 'let' : 'ok' %>"><%= f.ai_melding ? 'controleer' : 'voorstel' %></span><% } else if (f.ai_status === 'fout') { %><span class="label-status fout">fout</span><% } else if (f.ai_status === 'wachtrij' || f.ai_status === 'bezig') { %><span class="label-status info">bezig…</span><% } %></td><% } %>
+      <% if (tab !== 'geboekt') { %><td><% if (f.ai_status === 'klaar') { %><span class="label-status <%= f.ai_melding ? 'let' : 'ok' %>"><%= f.ai_melding ? 'controleer' : 'voorstel' %></span><% } else if (f.ai_status === 'fout') { %><span class="label-status fout">fout</span><% } else if (f.ai_status === 'overgeslagen') { %><span class="label-status" title="<%= f.ai_melding || '' %>">handmatig</span><% } else if (f.ai_status === 'wachtrij' || f.ai_status === 'bezig') { %><span class="label-status info">bezig…</span><% } %></td><% } %>
     </tr>
   <% }) %>
   </tbody>
 </table>
 </div>
+</form>
 <%- include('../partials/voet') %>

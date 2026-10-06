@@ -1,10 +1,10 @@
 <div class="tabel-wrap mt1">
-<table>
+<table class="klikbaar">
   <thead><tr><th>Datum</th><th>Tegenpartij</th><th>Omschrijving</th><th class="bedrag">Bedrag</th><th>Status</th></tr></thead>
   <tbody>
   <% if (!transacties.length) { %><tr><td colspan="5" class="zacht">Geen transacties.</td></tr><% } %>
   <% transacties.forEach(t => { %>
-    <tr>
+    <tr data-href="/bank/transacties/<%= t.id %>">
       <td class="nowrap"><a href="/bank/transacties/<%= t.id %>"><%= nlDatum(t.boekdatum) %></a></td>
       <td><a href="/bank/transacties/<%= t.id %>"><%= t.tegenpartij_naam || '—' %></a><br><span class="hulp mono"><%= t.tegenpartij_iban || '' %></span></td>
       <td class="klein"><%= (t.omschrijving || '').slice(0, 120) %></td>

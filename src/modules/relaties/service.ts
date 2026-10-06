@@ -118,7 +118,7 @@ export function verwijderRelatie(ctx: Ctx, id: number, gebruiker: string): void 
   });
 }
 
-function normNaam(s: string): string {
+export function normNaam(s: string): string {
   return s
     .toLowerCase()
     .normalize("NFKD")

@@ -22,14 +22,39 @@
   <% if (k.MOLLIE_TOKEN.ingesteld) { %><form method="post" action="/instellingen/test/mollie" class="acties"><%- include('partials/csrf') %><button type="submit">Verbinding testen</button></form><% } %>
 </div>
 
+<div class="paneel" id="bedrijf">
+  <h2 class="mb0">Bedrijfsgegevens</h2>
+  <p class="hulp">Hiermee herkent de app jullie eigen facturen (bv. als je in de bcc staat of Mollie een kopie stuurt) en zet ze niet bij de inkoop. Ze worden ook niet door de AI uitgelezen.</p>
+  <form method="post" action="/instellingen/koppelingen" class="rij">
+    <%- include('partials/csrf') %><input type="hidden" name="sectie" value="bedrijf">
+    <div><label>Bedrijfsnaam</label><input name="EIGEN_NAAM" value="<%= k.EIGEN_NAAM.waarde || '' %>" placeholder="Medialan"></div>
+    <div class="smal"><label>BTW-nummer</label><input name="EIGEN_BTW" value="<%= k.EIGEN_BTW.waarde || '' %>" placeholder="NL001234567B01"></div>
+    <div class="smal"><label>KvK-nummer</label><input name="EIGEN_KVK" value="<%= k.EIGEN_KVK.waarde || '' %>"></div>
+    <div class="smal"><button class="primair" type="submit">Opslaan</button></div>
+  </form>
+</div>
+
 <div class="paneel" id="ai">
   <h2 class="mb0">AI-uitlezen (Claude) <% if (k.ANTHROPIC_API_KEY.ingesteld) { %><span class="label-status ok">ingesteld</span><% } %></h2>
-  <p class="hulp">https://console.anthropic.com → API Keys. Enkele centen per factuur; de PDF van een inkoopfactuur wordt daarvoor naar Anthropic gestuurd. Zonder sleutel vul je facturen zelf in.</p>
-  <form method="post" action="/instellingen/koppelingen" class="rij">
+  <p class="hulp">https://console.anthropic.com → API Keys. De PDF van een inkoopfactuur wordt daarvoor naar Anthropic gestuurd. Zonder sleutel vul je facturen zelf in. Stel in de Anthropic Console (Settings → Limits) ook een harde maandlimiet in als extra vangnet.</p>
+  <% const limiet = Number(k.AI_LIMIET_MAAND.waarde); const pct = limiet > 0 ? Math.min(100, Math.round(aiDezeMaand.dollars / limiet * 100)) : 100; %>
+  <p>Verbruik deze maand: <strong>$<%= aiDezeMaand.dollars.toFixed(2) %></strong> van $<%= limiet.toFixed(2) %> (<%= pct %>%) · <%= aiDezeMaand.facturen %> factuur/facturen<%= aiDezeMaand.facturen ? ', gem. $' + (aiDezeMaand.dollars / aiDezeMaand.facturen).toFixed(3) + ' per factuur' : '' %>
+    <span class="hulp">· vorige maand $<%= aiVorigeMaand.dollars.toFixed(2) %> (<%= aiVorigeMaand.facturen %>)</span></p>
+  <% if (pct >= 100) { %><div class="melding let">De maandlimiet is bereikt: nieuwe facturen worden niet meer automatisch uitgelezen (je kunt ze wel zelf invullen).</div><% } %>
+  <form method="post" action="/instellingen/koppelingen">
     <%- include('partials/csrf') %><input type="hidden" name="sectie" value="ai">
-    <% geheimVeld('ANTHROPIC_API_KEY', 'API-sleutel', k.ANTHROPIC_API_KEY) %>
-    <div class="smal"><label>Model</label><input name="AI_MODEL" value="<%= k.AI_MODEL.waarde %>"></div>
-    <div class="smal"><button class="primair" type="submit">Opslaan</button></div>
+    <div class="rij">
+      <% geheimVeld('ANTHROPIC_API_KEY', 'API-sleutel', k.ANTHROPIC_API_KEY) %>
+      <div><label>Model</label><select name="AI_MODEL">
+        <% const bekend = aiModellen.some(m => m.id === k.AI_MODEL.waarde); if (!bekend) { %><option value="<%= k.AI_MODEL.waarde %>" selected><%= k.AI_MODEL.waarde %></option><% } %>
+        <% aiModellen.forEach(m => { %><option value="<%= m.id %>" <%= m.id === k.AI_MODEL.waarde ? 'selected' : '' %>><%= m.naam %> – $<%= m.input %>/$<%= m.output %> per mln tokens</option><% }) %>
+      </select></div>
+    </div>
+    <div class="rij mt1">
+      <div class="smal"><label>Maandlimiet in $ (0 = AI uit)</label><input name="AI_LIMIET_MAAND" inputmode="decimal" value="<%= k.AI_LIMIET_MAAND.waarde %>"></div>
+      <div class="smal"><label>Max. pagina's per PDF</label><input type="number" name="AI_MAX_PAGINAS" min="1" max="100" value="<%= k.AI_MAX_PAGINAS.waarde %>"></div>
+      <div class="smal"><button class="primair" type="submit">Opslaan</button></div>
+    </div>
   </form>
   <% if (k.ANTHROPIC_API_KEY.ingesteld) { %><form method="post" action="/instellingen/test/ai" class="acties"><%- include('partials/csrf') %><button type="submit">Verbinding testen</button></form><% } %>
 </div>
