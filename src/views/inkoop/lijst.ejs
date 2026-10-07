@@ -50,7 +50,7 @@
       <td class="zacht"><%= (f.omschrijving || '').slice(0, 60) %><%= f.bron === 'email' ? ' ✉' : '' %></td>
       <td class="bedrag"><%= euro(f.totaal_incl) %></td>
       <td><%- include('../partials/betaalstatus', { f }) %></td>
-      <% if (tab !== 'geboekt') { %><td><% if (f.ai_status === 'klaar') { %><span class="label-status <%= f.ai_melding ? 'let' : 'ok' %>"><%= f.ai_melding ? 'controleer' : 'voorstel' %></span><% } else if (f.ai_status === 'fout') { %><span class="label-status fout">fout</span><% } else if (f.ai_status === 'overgeslagen') { %><span class="label-status" title="<%= f.ai_melding || '' %>">handmatig</span><% } else if (f.ai_status === 'wachtrij' || f.ai_status === 'bezig') { %><span class="label-status info">bezig…</span><% } %></td><% } %>
+      <% if (tab !== 'geboekt') { %><td><% if (f.ai_status === 'klaar') { %><span class="label-status <%= f.meldingen.length ? 'let' : 'ok' %>" title="<%= f.meldingen.join(' · ') %>"><%= f.meldingen.length ? 'controleer' : 'voorstel' %></span><% } else if (f.ai_status === 'fout') { %><span class="label-status fout">fout</span><% } else if (f.ai_status === 'overgeslagen') { %><span class="label-status" title="<%= f.ai_melding || '' %>">handmatig</span><% } else if (f.ai_status === 'wachtrij' || f.ai_status === 'bezig') { %><span class="label-status info">bezig…</span><% } %></td><% } %>
     </tr>
   <% }) %>
   </tbody>

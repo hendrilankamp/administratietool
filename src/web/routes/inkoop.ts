@@ -10,7 +10,7 @@ import { categorieen, haalRelatie, relaties, slaRelatieOp } from "../../modules/
 import { haalTransactie } from "../../modules/bank/service.ts";
 import { zetOmNaarVerkoop } from "../../modules/facturen/omzetten.ts";
 import { eigenGegevensIngesteld, isEigenLeverancier } from "../../modules/facturen/eigen.ts";
-import { aanvullingen, koppelLeverancierAanFactuur, koppelOnbekendeLeveranciers, leverancierVelden, VELD_NAAM, vulLeverancierAan } from "../../modules/facturen/leverancier-uit-factuur.ts";
+import { actueleMeldingen, aanvullingen, koppelLeverancierAanFactuur, koppelOnbekendeLeveranciers, leverancierVelden, VELD_NAAM, vulLeverancierAan } from "../../modules/facturen/leverancier-uit-factuur.ts";
 import { csrfNaUpload } from "../sessie.ts";
 import { datum, geheel, idParam, klaar, lijst, regelsUitFormulier, render, tekst } from "../render.ts";
 import type { Diensten } from "../diensten.ts";
@@ -22,6 +22,8 @@ export function inkoopRouter(ctx: Ctx, diensten: Diensten): Router {
   const gebruiker = (req: Express.Request) => req.sessie!.gebruikersnaam!;
 
   r.get("/", (req, res) => {
+    // Facturen zonder leverancier koppelen aan inmiddels bekende relaties (BTW-nummer, IBAN of naam)
+    koppelOnbekendeLeveranciers(ctx);
     const tab = req.query.tab === "geboekt" ? "geboekt" : "te_beoordelen";
     const filter = {
       status: tab,
@@ -31,7 +33,7 @@ export function inkoopRouter(ctx: Ctx, diensten: Diensten): Router {
     render(ctx, req, res, "inkoop/lijst", {
       titel: "Inkoopfacturen",
       tab,
-      facturen: factuurLijst(ctx, "inkoop", filter),
+      facturen: factuurLijst(ctx, "inkoop", filter).map((f) => ({ ...f, meldingen: actueleMeldingen(f.ai_melding, !!f.relatie_id) })),
       aantalTeBeoordelen: ctx.db.get<{ n: number }>("SELECT COUNT(*) AS n FROM inkoopfacturen WHERE status = 'te_beoordelen'")!.n,
       ai: aiBeschikbaar(ctx),
     });
@@ -117,6 +119,7 @@ export function inkoopRouter(ctx: Ctx, diensten: Diensten): Router {
       btwCodes: btwCodes(ctx.db).filter((c) => c.soort !== "verkoop"),
       ai: aiBeschikbaar(ctx),
       eigenFactuur: !!voorstel && isEigenLeverancier(ctx, voorstel.leverancier),
+      meldingen: actueleMeldingen(f.ai_melding, !!f.relatie_id),
       eigenNaamIngesteld: eigenGegevensIngesteld(ctx),
     });
   });

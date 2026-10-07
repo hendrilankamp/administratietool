@@ -7,8 +7,8 @@
 
 <% if (f.ai_status === 'wachtrij' || f.ai_status === 'bezig') { %><span data-vernieuw="5"></span><div class="melding info">De AI leest deze factuur uit… de pagina vernieuwt automatisch.</div><% } %>
 <% if (f.ai_status === 'fout') { %><div class="melding fout">AI-uitlezen mislukt: <%= f.ai_melding %></div><% } %>
-<% if (f.ai_status === 'klaar' && f.ai_melding && !geboekt) { %>
-  <div class="melding let">Controleer het voorstel:<ul><% f.ai_melding.split('\n').forEach(m => { %><li><%= m %></li><% }) %></ul></div>
+<% if (f.ai_status === 'klaar' && meldingen.length && !geboekt) { %>
+  <div class="melding let">Controleer het voorstel:<ul><% meldingen.forEach(m => { %><li><%= m %></li><% }) %></ul></div>
 <% } %>
 <% if (email) { %><p class="hulp">Ontvangen per e-mail van <%= email.afzender %> op <%= nlTijdstip(email.ontvangen_op) %>: “<%= email.onderwerp %>”</p><% } %>
 

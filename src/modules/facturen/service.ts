@@ -218,6 +218,10 @@ export function werkFactuurBij(ctx: Ctx, soort: Soort, id: number, invoer: Factu
         id,
       ],
     );
+    if (soort === "inkoop" && data.relatie_id && huidig.ai_melding) {
+      const over = huidig.ai_melding.split("\n").filter((m) => !/^Leverancier ".*" is nog niet bekend/.test(m.trim()));
+      ctx.db.run("UPDATE inkoopfacturen SET ai_melding = ? WHERE id = ?", [over.join("\n") || null, id]);
+    }
     ctx.db.run(`DELETE FROM ${t.regels} WHERE factuur_id = ?`, [id]);
     for (const r of v.regels) {
       ctx.db.run(

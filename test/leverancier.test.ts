@@ -56,3 +56,20 @@ test("aanvullen overschrijft niets; andere facturen van dezelfde leverancier wor
     ctx.opruimen();
   }
 });
+
+test("melding 'leverancier nog niet bekend' verdwijnt na koppelen", async () => {
+  const { actueleMeldingen } = await import("../src/modules/facturen/leverancier-uit-factuur.ts");
+  const m = 'Leverancier "MCXess B.V." is nog niet bekend; maak hem aan vanuit het voorstel.\nAI: controleer de vervaldatum';
+  assert.deepEqual(actueleMeldingen(m, false).length, 2);
+  assert.deepEqual(actueleMeldingen(m, true), ["AI: controleer de vervaldatum"]);
+  const ctx = await testCtx();
+  try {
+    const rel = slaRelatieOp(ctx, null, { naam: "MCXess B.V.", type: "leverancier" }, "t");
+    const f = nieuweInkoopfactuur(ctx, "upload", { gebruiker: "t" });
+    ctx.db.run("UPDATE inkoopfacturen SET ai_melding = ? WHERE id = ?", ['Leverancier "MCXess B.V." is nog niet bekend; maak hem aan vanuit het voorstel.', f]);
+    koppelLeverancierAanFactuur(ctx, f, rel);
+    assert.equal(ctx.db.get<{ ai_melding: string | null }>("SELECT ai_melding FROM inkoopfacturen WHERE id = ?", [f])!.ai_melding, null);
+  } finally {
+    ctx.opruimen();
+  }
+});

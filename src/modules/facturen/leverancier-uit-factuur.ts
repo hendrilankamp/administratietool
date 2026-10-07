@@ -76,12 +76,24 @@ export function vulLeverancierAan(ctx: Ctx, relatieId: number, v: AiVoorstel, ge
   return velden.map((k) => VELD_NAAM[k]);
 }
 
+/** AI-meldingen die niet meer gelden zodra er een leverancier gekoppeld is. */
+export function actueleMeldingen(melding: string | null | undefined, heeftLeverancier: boolean): string[] {
+  return (melding ?? "")
+    .split("\n")
+    .map((m) => m.trim())
+    .filter(Boolean)
+    .filter((m) => !(heeftLeverancier && /^Leverancier ".*" is nog niet bekend/.test(m)));
+}
+
 /** Koppelt een leverancier aan een factuur en vult ontbrekende categorieën op de regels in. */
 export function koppelLeverancierAanFactuur(ctx: Ctx, factuurId: number, relatieId: number): void {
   const rel = haalRelatie(ctx, relatieId);
   if (!rel) return;
   ctx.db.tx(() => {
     ctx.db.run("UPDATE inkoopfacturen SET relatie_id = ?, gewijzigd_op = ? WHERE id = ? AND status = 'te_beoordelen'", [relatieId, new Date().toISOString(), factuurId]);
+    // Melding "leverancier nog niet bekend" opruimen
+    const m = ctx.db.get<{ ai_melding: string | null }>("SELECT ai_melding FROM inkoopfacturen WHERE id = ?", [factuurId])?.ai_melding;
+    if (m) ctx.db.run("UPDATE inkoopfacturen SET ai_melding = ? WHERE id = ?", [actueleMeldingen(m, true).join("\n") || null, factuurId]);
     if (rel.standaard_categorie_id) {
       ctx.db.run(
         "UPDATE inkoopfactuur_regels SET categorie_id = ? WHERE factuur_id = ? AND categorie_id IS NULL AND (SELECT status FROM inkoopfacturen WHERE id = ?) = 'te_beoordelen'",
