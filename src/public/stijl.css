@@ -132,6 +132,8 @@ form.inline { display: inline; }
 .regels .col-omschr { min-width: 180px; }
 .regels .col-bedrag { width: 110px; }
 .regels .col-btw { width: 150px; }
+.regels .col-klant { min-width: 150px; }
+.mt-klein { margin-top: 0.25rem; }
 .verborgen { display: none !important; }
 .qr svg { width: 220px; height: 220px; background: #fff; padding: 8px; border-radius: 8px; }
 .inlog { max-width: 400px; margin: 10vh auto; }

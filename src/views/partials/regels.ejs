@@ -1,8 +1,19 @@
-<%# Bewerkbare factuurregels. Verwacht: regels, categorieen, btwCodes, bewerkbaar %>
+<%# Bewerkbare factuurregels. Verwacht: regels, categorieen, btwCodes, bewerkbaar; optioneel: doorbelastKlanten (alleen inkoop) %>
+<% const doorbelasten = typeof doorbelastKlanten !== 'undefined' && Array.isArray(doorbelastKlanten); %>
 <% const tarieven = {}; btwCodes.forEach(c => tarieven[c.code] = { bp: c.tarief_bp, verlegd: !!c.verlegd }); %>
 <% const regelRij = (r) => { %>
   <tr>
-    <td class="col-omschr"><input data-naam="omschrijving" value="<%= r.omschrijving || '' %>" <%= bewerkbaar ? '' : 'disabled' %>></td>
+    <td class="col-omschr"><input data-naam="omschrijving" value="<%= r.omschrijving || '' %>" <%= bewerkbaar ? '' : 'disabled' %>>
+      <% if (doorbelasten) { %><input class="klein mt-klein" data-naam="periode" value="<%= r.periode || '' %>" placeholder="periode (optioneel)" <%= bewerkbaar ? '' : 'disabled' %>><% } %></td>
+    <% if (doorbelasten) { %>
+    <td class="col-klant">
+      <select data-naam="doorbelast_relatie_id" <%= bewerkbaar ? '' : 'disabled' %>>
+        <option value=""><%= r.doorbelast_naam && !r.doorbelast_relatie_id ? '⚠ ' + r.doorbelast_naam + ' – kies klant' : '–' %></option>
+        <% doorbelastKlanten.forEach(k => { %><option value="<%= k.id %>" <%= r.doorbelast_relatie_id === k.id ? 'selected' : '' %>><%= k.naam %></option><% }) %>
+      </select>
+      <input type="hidden" data-naam="doorbelast_naam" value="<%= r.doorbelast_naam || '' %>">
+    </td>
+    <% } %>
     <td>
       <select data-naam="categorie_id" <%= bewerkbaar ? '' : 'disabled' %>>
         <option value="">– kies –</option>
@@ -21,15 +32,15 @@
 <% } %>
 <div class="tabel-wrap">
 <table class="regels" <%= bewerkbaar ? 'data-bewerkbaar' : '' %> data-tarieven="<%= JSON.stringify(tarieven) %>">
-  <thead><tr><th>Omschrijving</th><th>Categorie</th><th class="bedrag">Bedrag excl.</th><th>BTW</th><th class="bedrag">BTW-bedrag</th><th></th></tr></thead>
+  <thead><tr><th>Omschrijving</th><% if (doorbelasten) { %><th>Doorbelasten aan</th><% } %><th>Categorie</th><th class="bedrag">Bedrag excl.</th><th>BTW</th><th class="bedrag">BTW-bedrag</th><th></th></tr></thead>
   <tbody>
     <% (regels.length ? regels : [{}]).forEach(r => regelRij(r)) %>
   </tbody>
   <tfoot>
-    <tr><td colspan="2"><% if (bewerkbaar) { %><button class="klein" data-regel-toevoegen>+ Regel</button><% } %></td>
+    <tr><td colspan="<%= doorbelasten ? 3 : 2 %>"><% if (bewerkbaar) { %><button class="klein" data-regel-toevoegen>+ Regel</button><% } %></td>
       <td class="bedrag" id="tot-excl"><%= formatBedrag(regels.reduce((s, r) => s + (r.bedrag_excl || 0), 0)) %></td><td class="rechts">BTW</td>
       <td class="bedrag" id="tot-btw"><%= formatBedrag(regels.reduce((s, r) => s + (r.btw_bedrag || 0), 0)) %></td><td></td></tr>
-    <tr><td colspan="3"></td><td class="rechts">Totaal incl.</td><td class="bedrag" id="tot-incl"><%= formatBedrag(regels.reduce((s, r) => s + (r.bedrag_excl || 0) + (r.btw_bedrag || 0), 0)) %></td><td></td></tr>
+    <tr><td colspan="<%= doorbelasten ? 4 : 3 %>"></td><td class="rechts">Totaal incl.</td><td class="bedrag" id="tot-incl"><%= formatBedrag(regels.reduce((s, r) => s + (r.bedrag_excl || 0) + (r.btw_bedrag || 0), 0)) %></td><td></td></tr>
   </tfoot>
 </table>
 </div>

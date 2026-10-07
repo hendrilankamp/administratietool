@@ -13,11 +13,12 @@ import { mollieIngesteld } from "../../integrations/mollie/index.ts";
 import { berekenAangifte, heropenPeriode, RUBRIEK_OMSCHRIJVING, sluitPeriode, zorgVoorPeriode } from "../../modules/btw/service.ts";
 import { factuurLijst } from "../../modules/facturen/service.ts";
 import { categorieen } from "../../modules/relaties/service.ts";
-import { dashboardCijfers, exportAccountant, winstEnVerlies } from "../../modules/rapportages/service.ts";
+import { dashboardCijfers, doorbelastingPerKlant, exportAccountant, winstEnVerlies } from "../../modules/rapportages/service.ts";
 import { ontbrekendeFacturen } from "../../modules/bank/service.ts";
 import { bedrag, geheel, idParam, klaar, render, tekst } from "../render.ts";
 import type { Diensten } from "../diensten.ts";
 import { koppelingenRoutes, koppelingInfo } from "./koppelingen.ts";
+import { koppelDoorbelastingen } from "../../modules/facturen/leverancier-uit-factuur.ts";
 
 export function dashboardRouter(ctx: Ctx): Router {
   const r = Router();
@@ -106,6 +107,7 @@ export function btwRouter(ctx: Ctx): Router {
 export function rapportagesRouter(ctx: Ctx): Router {
   const r = Router();
   r.get("/", (req, res) => {
+    koppelDoorbelastingen(ctx);
     const jaar = geheel(req.query.jaar) ?? Number(vandaag().slice(0, 4));
     const kw = geheel(req.query.kwartaal);
     const van = kw ? `${jaar}-${String((kw - 1) * 3 + 1).padStart(2, "0")}-01` : `${jaar}-01-01`;
@@ -116,6 +118,7 @@ export function rapportagesRouter(ctx: Ctx): Router {
       jaar,
       kw,
       wv: winstEnVerlies(ctx, van, tot),
+      doorbelasting: doorbelastingPerKlant(ctx, van, tot),
       debiteuren: factuurLijst(ctx, "verkoop", { status: "geboekt", betaalstatus: "onbetaald", limiet: 1000 }),
       crediteuren: factuurLijst(ctx, "inkoop", { status: "geboekt", betaalstatus: "onbetaald", limiet: 1000 }),
       vandaag: nu,

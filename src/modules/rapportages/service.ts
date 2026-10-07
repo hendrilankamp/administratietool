@@ -190,3 +190,52 @@ export async function exportAccountant(ctx: Ctx, jaar: number): Promise<string> 
   await zip.sluit();
   return pad;
 }
+
+export interface DoorbelastingKlant {
+  relatie_id: number;
+  naam: string;
+  ingekocht: number; // excl. BTW, centen
+  verkocht: number; // excl. BTW, centen
+  verschil: number; // verkocht - ingekocht
+  regels: { factuur_id: number; factuurnummer: string | null; leverancier: string | null; factuurdatum: string | null; omschrijving: string | null; periode: string | null; bedrag_excl: number }[];
+  verkoopfacturen: { id: number; factuurnummer: string | null; factuurdatum: string | null; totaal_excl: number }[];
+}
+
+/**
+ * Doorbelasting per klant: wat er voor een klant is ingekocht (inkoopregels met "doorbelasten aan")
+ * tegenover wat er aan die klant is gefactureerd, in dezelfde periode.
+ */
+export function doorbelastingPerKlant(ctx: Ctx, van: string, tot: string): { klanten: DoorbelastingKlant[]; nietToegewezen: { naam: string; bedrag: number; aantal: number }[] } {
+  const regels = ctx.db.all<DoorbelastingKlant["regels"][number] & { relatie_id: number; klant: string }>(
+    `SELECT r.doorbelast_relatie_id AS relatie_id, k.naam AS klant, f.id AS factuur_id, f.factuurnummer, l.naam AS leverancier, f.factuurdatum,
+            r.omschrijving, r.periode, r.bedrag_excl
+     FROM inkoopfactuur_regels r JOIN inkoopfacturen f ON f.id = r.factuur_id
+     JOIN relaties k ON k.id = r.doorbelast_relatie_id LEFT JOIN relaties l ON l.id = f.relatie_id
+     WHERE f.status = 'geboekt' AND f.factuurdatum BETWEEN ? AND ?
+     ORDER BY k.naam, f.factuurdatum`,
+    [van, tot],
+  );
+  const perKlant = new Map<number, DoorbelastingKlant>();
+  for (const r of regels) {
+    const k = perKlant.get(r.relatie_id) ?? { relatie_id: r.relatie_id, naam: r.klant, ingekocht: 0, verkocht: 0, verschil: 0, regels: [], verkoopfacturen: [] };
+    k.ingekocht += r.bedrag_excl;
+    k.regels.push(r);
+    perKlant.set(r.relatie_id, k);
+  }
+  for (const k of perKlant.values()) {
+    k.verkoopfacturen = ctx.db.all(
+      "SELECT id, factuurnummer, factuurdatum, totaal_excl FROM verkoopfacturen WHERE relatie_id = ? AND status = 'geboekt' AND factuurdatum BETWEEN ? AND ? ORDER BY factuurdatum",
+      [k.relatie_id, van, tot],
+    );
+    k.verkocht = k.verkoopfacturen.reduce((s, f) => s + f.totaal_excl, 0);
+    k.verschil = k.verkocht - k.ingekocht;
+  }
+  const nietToegewezen = ctx.db.all<{ naam: string; bedrag: number; aantal: number }>(
+    `SELECT r.doorbelast_naam AS naam, SUM(r.bedrag_excl) AS bedrag, COUNT(*) AS aantal
+     FROM inkoopfactuur_regels r JOIN inkoopfacturen f ON f.id = r.factuur_id
+     WHERE r.doorbelast_naam IS NOT NULL AND r.doorbelast_relatie_id IS NULL AND (f.status = 'te_beoordelen' OR f.factuurdatum BETWEEN ? AND ?)
+     GROUP BY r.doorbelast_naam ORDER BY r.doorbelast_naam`,
+    [van, tot],
+  );
+  return { klanten: [...perKlant.values()].sort((a, b) => a.verschil - b.verschil), nietToegewezen };
+}

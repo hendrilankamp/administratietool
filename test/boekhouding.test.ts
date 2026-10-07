@@ -92,7 +92,7 @@ test("AI-voorstel: BTW-code keuze, controles en leveranciermatch", async () => {
       valuta: "EUR",
       is_creditnota: false,
       btw_verlegd: true,
-      regels: [{ omschrijving: "Google Ads", bedrag_excl: 250.0, btw_tarief: 0, btw_bedrag: 0 }],
+      regels: [{ omschrijving: "Google Ads", klant: null, periode: null, bedrag_excl: 250.0, btw_tarief: 0, btw_bedrag: 0 }],
       totaal_excl: 250,
       totaal_btw: 0,
       totaal_incl: 250,
@@ -107,7 +107,7 @@ test("AI-voorstel: BTW-code keuze, controles en leveranciermatch", async () => {
     assert.ok(v.meldingen.some((m) => m.includes("al betaald")));
     assert.ok(!v.meldingen.some((m) => m.includes("wijkt af")));
 
-    const fout = vertaalVoorstel(ctx, { ...voorstel, btw_verlegd: false, leverancier: { ...voorstel.leverancier, land: "NL", btw_nummer: null, naam: "Onbekend BV" }, regels: [{ omschrijving: "x", bedrag_excl: 100, btw_tarief: 21, btw_bedrag: 30 }], totaal_incl: 130, totaal_excl: 100 });
+    const fout = vertaalVoorstel(ctx, { ...voorstel, btw_verlegd: false, leverancier: { ...voorstel.leverancier, land: "NL", btw_nummer: null, naam: "Onbekend BV" }, regels: [{ omschrijving: "x", klant: null, periode: null, bedrag_excl: 100, btw_tarief: 21, btw_bedrag: 30 }], totaal_incl: 130, totaal_excl: 100 });
     assert.equal(fout.relatie_id, null);
     assert.ok(fout.meldingen.some((m) => m.includes("past niet")));
     assert.ok(fout.meldingen.some((m) => m.includes("nog niet bekend")));

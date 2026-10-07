@@ -55,7 +55,8 @@
       <div class="veld mt1"><label for="om">Omschrijving</label><input id="om" name="omschrijving" value="<%= f.omschrijving || '' %>"></div>
 
       <h3>Regels</h3>
-      <%- include('../partials/regels', { regels: f.regels, categorieen, btwCodes, bewerkbaar }) %>
+      <%- include('../partials/regels', { regels: f.regels, categorieen, btwCodes, bewerkbaar, doorbelastKlanten: klanten }) %>
+      <p class="hulp">“Doorbelasten aan”: voor welke klant deze kosten zijn ingekocht (bv. licenties). Zie Rapportages → Doorbelasting per klant.</p>
 
       <div class="acties">
         <% if (!geboekt) { %>

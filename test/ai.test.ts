@@ -22,7 +22,7 @@ function voorstel(leverancier: string, btw: string | null = null): AiVoorstel {
     valuta: "EUR",
     is_creditnota: false,
     btw_verlegd: false,
-    regels: [{ omschrijving: "Hosting", bedrag_excl: 10, btw_tarief: 21, btw_bedrag: 2.1 }],
+    regels: [{ omschrijving: "Hosting", klant: null, periode: null, bedrag_excl: 10, btw_tarief: 21, btw_bedrag: 2.1 }],
     totaal_excl: 10,
     totaal_btw: 2.1,
     totaal_incl: 12.1,

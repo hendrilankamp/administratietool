@@ -1,7 +1,7 @@
 import type { Ctx } from "../../lib/context.ts";
 import { audit } from "../../lib/context.ts";
 import type { AiVoorstel } from "../../integrations/ai/extract.ts";
-import { categorieen, haalRelatie, normaliseerBtwNummer, normaliseerIban, zoekRelatieMatch, type Relatie } from "../relaties/service.ts";
+import { categorieen, haalRelatie, normaliseerBtwNummer, normaliseerIban, zoekKlant, zoekRelatieMatch, type Relatie } from "../relaties/service.ts";
 
 /** Velden van een relatie die uit een factuur kunnen komen. */
 export const AANVULBAAR = ["btw_nummer", "kvk", "iban", "email", "adres", "postcode", "plaats"] as const;
@@ -120,6 +120,17 @@ export function koppelOnbekendeLeveranciers(ctx: Ctx): number {
     } catch {
       // ongeldig voorstel: overslaan
     }
+  }
+  return n;
+}
+
+/** Koppelt inkoopregels met een klantnaam (van de factuur) aan inmiddels bekende klanten. */
+export function koppelDoorbelastingen(ctx: Ctx): number {
+  let n = 0;
+  const namen = ctx.db.all<{ naam: string }>("SELECT DISTINCT doorbelast_naam AS naam FROM inkoopfactuur_regels WHERE doorbelast_naam IS NOT NULL AND doorbelast_relatie_id IS NULL");
+  for (const { naam } of namen) {
+    const k = zoekKlant(ctx, naam);
+    if (k) n += ctx.db.run("UPDATE inkoopfactuur_regels SET doorbelast_relatie_id = ? WHERE doorbelast_naam = ? AND doorbelast_relatie_id IS NULL", [k.id, naam]).changes;
   }
   return n;
 }

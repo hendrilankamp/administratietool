@@ -91,6 +91,9 @@ export function regelsUitFormulier(v: unknown) {
         bedrag_excl: excl,
         btw_code: tekst(r.btw_code, 30) ?? "NL21",
         btw_bedrag: btw,
+        doorbelast_relatie_id: geheel(r.doorbelast_relatie_id),
+        doorbelast_naam: tekst(r.doorbelast_naam, 200),
+        periode: tekst(r.periode, 100),
       };
     });
 }

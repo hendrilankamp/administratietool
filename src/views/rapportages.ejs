@@ -25,6 +25,37 @@
 </div>
 <% if (wv.neutraal.length) { %><p class="hulp">Neutraal: <%= wv.neutraal.map(r => r.categorie + ' ' + euro(r.bedrag)).join(' · ') %></p><% } %>
 
+<h2 id="doorbelasting">Doorbelasting per klant <span class="hulp">(ingekocht voor de klant tegenover gefactureerd, excl. BTW)</span></h2>
+<% if (doorbelasting.nietToegewezen.length) { %>
+  <div class="melding let">Inkoopregels met een klantnaam die nog niet aan een klant gekoppeld is:
+    <ul><% doorbelasting.nietToegewezen.forEach(n => { %><li><strong><%= n.naam %></strong> – <%= n.aantal %> regel(s), <%= euro(n.bedrag) %> · <a href="/relaties/nieuw?type=klant">klant aanmaken</a></li><% }) %></ul>
+    <span class="hulp">Na het aanmaken worden de regels automatisch gekoppeld (herkend op naam of e-maildomein), of kies de klant per regel op de inkoopfactuur.</span></div>
+<% } %>
+<% if (!doorbelasting.klanten.length) { %>
+  <p class="hulp">Nog geen doorbelaste inkoop in deze periode. Kies op een inkoopfactuur per regel “Doorbelasten aan”.</p>
+<% } else { %>
+<div class="tabel-wrap"><table>
+  <thead><tr><th>Klant</th><th class="bedrag">Ingekocht</th><th class="bedrag">Gefactureerd</th><th class="bedrag">Verschil</th><th>Details</th></tr></thead>
+  <tbody>
+  <% doorbelasting.klanten.forEach(k => { %>
+    <tr>
+      <td><a href="/relaties/<%= k.relatie_id %>"><%= k.naam %></a><% if (!k.verkoopfacturen.length) { %> <span class="label-status fout">geen verkoopfactuur</span><% } %></td>
+      <td class="bedrag"><%= euro(k.ingekocht) %></td>
+      <td class="bedrag"><%= euro(k.verkocht) %></td>
+      <td class="bedrag <%= k.verschil < 0 ? 'negatief' : '' %>"><%= euro(k.verschil) %></td>
+      <td><details><summary class="klein"><%= k.regels.length %> inkoopregel(s), <%= k.verkoopfacturen.length %> verkoopfactuur/-facturen</summary>
+        <ul class="klein">
+          <% k.regels.forEach(r => { %><li>Inkoop <a href="/inkoop/<%= r.factuur_id %>"><%= r.factuurnummer || '#' + r.factuur_id %></a> <%= r.leverancier ? '(' + r.leverancier + ')' : '' %> <%= nlDatum(r.factuurdatum) %>: <%= r.omschrijving || '' %><%= r.periode ? ' · ' + r.periode : '' %> – <%= euro(r.bedrag_excl) %></li><% }) %>
+          <% k.verkoopfacturen.forEach(v => { %><li>Verkoop <a href="/verkoop/<%= v.id %>"><%= v.factuurnummer || '#' + v.id %></a> <%= nlDatum(v.factuurdatum) %> – <%= euro(v.totaal_excl) %></li><% }) %>
+        </ul></details></td>
+    </tr>
+  <% }) %>
+  </tbody>
+  <tfoot><tr><td>Totaal</td><td class="bedrag"><%= euro(doorbelasting.klanten.reduce((s, k) => s + k.ingekocht, 0)) %></td><td class="bedrag"><%= euro(doorbelasting.klanten.reduce((s, k) => s + k.verkocht, 0)) %></td><td class="bedrag"><%= euro(doorbelasting.klanten.reduce((s, k) => s + k.verschil, 0)) %></td><td></td></tr></tfoot>
+</table></div>
+<p class="hulp">“Gefactureerd” is het totaal van alle verkoopfacturen aan deze klant in de periode (ook voor andere diensten). Een negatief verschil betekent dat je meer inkoopt dan je doorbelast. Kies “Heel jaar” om jaarlijkse facturen tegenover maandelijkse inkoop te zien.</p>
+<% } %>
+
 <h2 id="debiteuren">Nog te ontvangen</h2>
 <div class="tabel-wrap"><table>
   <thead><tr><th>Factuur</th><th>Klant</th><th>Datum</th><th>Vervaldatum</th><th class="bedrag">Open</th></tr></thead>

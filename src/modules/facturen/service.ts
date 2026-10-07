@@ -19,6 +19,10 @@ export const regelSchema = z.object({
   bedrag_excl: z.number().int(),
   btw_code: z.string().min(1),
   btw_bedrag: z.number().int().nullable().optional(),
+  // Alleen inkoop: doorbelasten aan een klant
+  doorbelast_relatie_id: z.number().int().positive().nullable().optional(),
+  doorbelast_naam: z.string().trim().max(200).nullable().optional(),
+  periode: z.string().trim().max(100).nullable().optional(),
 });
 export type RegelInvoer = z.infer<typeof regelSchema>;
 
@@ -73,6 +77,9 @@ export interface Regel {
   bedrag_excl: number;
   btw_code: string;
   btw_bedrag: number;
+  doorbelast_relatie_id?: number | null;
+  doorbelast_naam?: string | null;
+  periode?: string | null;
 }
 
 function betaalstatus(f: Omit<Factuur, "openstaand" | "betaalstatus">): Pick<Factuur, "openstaand" | "betaalstatus"> {
@@ -225,8 +232,12 @@ export function werkFactuurBij(ctx: Ctx, soort: Soort, id: number, invoer: Factu
     ctx.db.run(`DELETE FROM ${t.regels} WHERE factuur_id = ?`, [id]);
     for (const r of v.regels) {
       ctx.db.run(
-        `INSERT INTO ${t.regels} (factuur_id, volgorde, omschrijving, categorie_id, bedrag_excl, btw_code, btw_bedrag) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [id, r.volgorde, r.omschrijving ?? null, r.categorie_id ?? null, r.bedrag_excl, r.btw_code, r.btw_bedrag],
+        soort === "inkoop"
+          ? `INSERT INTO inkoopfactuur_regels (factuur_id, volgorde, omschrijving, categorie_id, bedrag_excl, btw_code, btw_bedrag, doorbelast_relatie_id, doorbelast_naam, periode) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          : `INSERT INTO verkoopfactuur_regels (factuur_id, volgorde, omschrijving, categorie_id, bedrag_excl, btw_code, btw_bedrag) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        soort === "inkoop"
+          ? [id, r.volgorde, r.omschrijving ?? null, r.categorie_id ?? null, r.bedrag_excl, r.btw_code, r.btw_bedrag, r.doorbelast_relatie_id ?? null, r.doorbelast_naam ?? null, r.periode ?? null]
+          : [id, r.volgorde, r.omschrijving ?? null, r.categorie_id ?? null, r.bedrag_excl, r.btw_code, r.btw_bedrag],
       );
     }
     audit(ctx.db, opties.gebruiker, opties.boeken && huidig.status !== "geboekt" ? "geboekt" : "gewijzigd", t.factuur, id, {

@@ -10,7 +10,7 @@ import { categorieen, haalRelatie, relaties, slaRelatieOp } from "../../modules/
 import { haalTransactie } from "../../modules/bank/service.ts";
 import { zetOmNaarVerkoop } from "../../modules/facturen/omzetten.ts";
 import { eigenGegevensIngesteld, isEigenLeverancier } from "../../modules/facturen/eigen.ts";
-import { actueleMeldingen, aanvullingen, koppelLeverancierAanFactuur, koppelOnbekendeLeveranciers, leverancierVelden, VELD_NAAM, vulLeverancierAan } from "../../modules/facturen/leverancier-uit-factuur.ts";
+import { actueleMeldingen, aanvullingen, koppelDoorbelastingen, koppelLeverancierAanFactuur, koppelOnbekendeLeveranciers, leverancierVelden, VELD_NAAM, vulLeverancierAan } from "../../modules/facturen/leverancier-uit-factuur.ts";
 import { csrfNaUpload } from "../sessie.ts";
 import { datum, geheel, idParam, klaar, lijst, regelsUitFormulier, render, tekst } from "../render.ts";
 import type { Diensten } from "../diensten.ts";
@@ -24,6 +24,7 @@ export function inkoopRouter(ctx: Ctx, diensten: Diensten): Router {
   r.get("/", (req, res) => {
     // Facturen zonder leverancier koppelen aan inmiddels bekende relaties (BTW-nummer, IBAN of naam)
     koppelOnbekendeLeveranciers(ctx);
+    koppelDoorbelastingen(ctx);
     const tab = req.query.tab === "geboekt" ? "geboekt" : "te_beoordelen";
     const filter = {
       status: tab,
@@ -115,6 +116,7 @@ export function inkoopRouter(ctx: Ctx, diensten: Diensten): Router {
         return Object.keys(aanvullingen(ctx, rel, voorstel)).map((k) => VELD_NAAM[k as keyof typeof VELD_NAAM]);
       })(),
       leveranciers: relaties(ctx, { type: "leverancier" }),
+      klanten: relaties(ctx, { type: "klant" }),
       categorieen: categorieen(ctx).filter((c) => c.soort !== "omzet"),
       btwCodes: btwCodes(ctx.db).filter((c) => c.soort !== "verkoop"),
       ai: aiBeschikbaar(ctx),

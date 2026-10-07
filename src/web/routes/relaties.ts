@@ -6,7 +6,7 @@ import { btwCodes } from "../../modules/btw/service.ts";
 import { categorieen, haalRelatie, relaties, slaRelatieOp, verwijderRelatie } from "../../modules/relaties/service.ts";
 import { geheel, idParam, klaar, render, tekst } from "../render.ts";
 import { factuurLijst, haalFactuur } from "../../modules/facturen/service.ts";
-import { koppelLeverancierAanFactuur, koppelOnbekendeLeveranciers, leverancierVelden } from "../../modules/facturen/leverancier-uit-factuur.ts";
+import { koppelDoorbelastingen, koppelLeverancierAanFactuur, koppelOnbekendeLeveranciers, leverancierVelden } from "../../modules/facturen/leverancier-uit-factuur.ts";
 import type { AiVoorstel } from "../../integrations/ai/extract.ts";
 
 export function relatiesRouter(ctx: Ctx): Router {
@@ -47,6 +47,8 @@ export function relatiesRouter(ctx: Ctx): Router {
       }
       const terug = typeof req.body.terug === "string" && /^\/(inkoop|verkoop)\/\d+$/.test(req.body.terug) ? req.body.terug : `/relaties/${id}`;
       const n = koppelOnbekendeLeveranciers(ctx);
+      const d = koppelDoorbelastingen(ctx);
+      if (d) ctx.log.info(`${d} inkoopregel(s) gekoppeld aan klant ${id}`);
       klaar(ctx, req, res, terug, `Relatie aangemaakt.${n ? ` ${n} te beoordelen factuur/facturen aan deze relatie gekoppeld.` : ""}`);
     } catch (e) {
       if (e instanceof z.ZodError) throw new GebruikersFout(e.issues.map((i) => i.message).join(", "));

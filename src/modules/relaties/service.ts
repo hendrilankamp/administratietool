@@ -148,6 +148,23 @@ export function zoekRelatieMatch(ctx: Ctx, gegevens: { btw_nummer?: string | nul
   return undefined;
 }
 
+/** Zoekt een klant (of 'beide') op naam, ook als de naam een domein is (bv. "lunieq.nl" → "Lunieq"). */
+export function zoekKlant(ctx: Ctx, naam: string): Relatie | undefined {
+  const varianten = [naam, naam.replace(/^www\./i, "").replace(/\.(nl|com|eu|be|de|net|org|io)$/i, "")];
+  const klanten = ctx.db.all<Relatie>("SELECT * FROM relaties WHERE type IN ('klant','beide')");
+  for (const v of varianten) {
+    const doel = normNaam(v);
+    if (doel.length < 3) continue;
+    const r = klanten.find((k) => {
+      const n = normNaam(k.naam);
+      const domein = k.email ? normNaam(k.email.split("@")[1]?.replace(/\.[a-z]+$/i, "") ?? "") : "";
+      return n === doel || domein === doel || (n.length >= 4 && (doel.startsWith(n) || n.startsWith(doel)));
+    });
+    if (r) return r;
+  }
+  return undefined;
+}
+
 export function categorieen(ctx: Ctx, alleenActief = true) {
   return ctx.db.all<{ id: number; naam: string; soort: string; standaard_btw_code: string | null; actief: number }>(
     `SELECT * FROM categorieen ${alleenActief ? "WHERE actief = 1" : ""} ORDER BY soort, naam`,
