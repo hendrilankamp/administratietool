@@ -8,6 +8,8 @@ import { btwCodes, eisOpenPeriode } from "../../modules/btw/service.ts";
 import { factuurLijst, haalFactuur, nieuweInkoopfactuur, verwijderFactuur, werkFactuurBij, zetHandmatigBetaald } from "../../modules/facturen/service.ts";
 import { categorieen, haalRelatie, relaties, slaRelatieOp } from "../../modules/relaties/service.ts";
 import { haalTransactie } from "../../modules/bank/service.ts";
+import { zetOmNaarVerkoop } from "../../modules/facturen/omzetten.ts";
+import { isEigenLeverancier } from "../../modules/facturen/eigen.ts";
 import { aanvullingen, koppelLeverancierAanFactuur, koppelOnbekendeLeveranciers, leverancierVelden, VELD_NAAM, vulLeverancierAan } from "../../modules/facturen/leverancier-uit-factuur.ts";
 import { csrfNaUpload } from "../sessie.ts";
 import { datum, geheel, idParam, klaar, lijst, regelsUitFormulier, render, tekst } from "../render.ts";
@@ -112,6 +114,8 @@ export function inkoopRouter(ctx: Ctx, diensten: Diensten): Router {
       categorieen: categorieen(ctx).filter((c) => c.soort !== "omzet"),
       btwCodes: btwCodes(ctx.db).filter((c) => c.soort !== "verkoop"),
       ai: aiBeschikbaar(ctx),
+      eigenFactuur: !!voorstel && isEigenLeverancier(ctx, voorstel.leverancier),
+      eigenNaamIngesteld: !!ctx.config.EIGEN_NAAM,
     });
   });
 
@@ -161,6 +165,14 @@ export function inkoopRouter(ctx: Ctx, diensten: Diensten): Router {
     koppelLeverancierAanFactuur(ctx, id, relId);
     const n = koppelOnbekendeLeveranciers(ctx);
     klaar(ctx, req, res, `/inkoop/${id}`, `Leverancier "${v.leverancier.naam}" aangemaakt en gekoppeld.${n ? ` Ook ${n} andere factuur/facturen gekoppeld.` : ""}`);
+  });
+
+  /** Eigen factuur die bij de inkoop staat omzetten naar een verkoopfactuur (concept). */
+  r.post("/:id/naar-verkoop", (req, res) => {
+    const id = idParam(req.params.id);
+    const o = zetOmNaarVerkoop(ctx, id, gebruiker(req));
+    if (o.bestondAl) return klaar(ctx, req, res, `/verkoop/${o.verkoopId}`, "Deze factuur stond al bij de verkoop; de dubbele inkoopfactuur is verwijderd.");
+    klaar(ctx, req, res, `/verkoop/${o.verkoopId}`, `Omgezet naar verkoopfactuur (concept)${o.klantAangemaakt ? `; klant "${o.klantAangemaakt}" aangemaakt` : ""}. Controleer en klik op Boeken.`);
   });
 
   /** Lege velden van de gekoppelde leverancier aanvullen met gegevens van de factuur. */

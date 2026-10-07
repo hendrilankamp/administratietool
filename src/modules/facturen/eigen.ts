@@ -1,6 +1,8 @@
 import type { Ctx } from "../../lib/context.ts";
 import { audit } from "../../lib/context.ts";
 import { normaliseerBtwNummer, normNaam } from "../relaties/service.ts";
+import { zetOmNaarVerkoop } from "./omzetten.ts";
+import { mollieIngesteld } from "../../integrations/mollie/index.ts";
 
 /**
  * Herkent eigen (verkoop)facturen die per e-mail binnenkomen, bv. omdat je in de bcc staat
@@ -39,24 +41,37 @@ export function negeerEigenFactuur(ctx: Ctx, factuurId: number, reden: string): 
   return r.changes > 0;
 }
 
-/** Ruimt bestaande eigen facturen op uit "te beoordelen" (op basis van onderwerp en AI-voorstel). */
-export function ruimEigenFacturenOp(ctx: Ctx): number {
-  if (!ctx.config.EIGEN_NAAM && !ctx.config.EIGEN_BTW && !ctx.config.EIGEN_KVK) return 0;
-  let n = 0;
+/**
+ * Verwerkt eigen facturen in "te beoordelen": met een AI-voorstel → omzetten naar verkoop (of verwijderen als
+ * hij daar al staat); alleen herkend op onderwerp en Mollie is gekoppeld → verwijderen (komt via Mollie binnen).
+ */
+export function ruimEigenFacturenOp(ctx: Ctx): { omgezet: number; verwijderd: number } {
+  const res = { omgezet: 0, verwijderd: 0 };
+  if (!ctx.config.EIGEN_NAAM && !ctx.config.EIGEN_BTW && !ctx.config.EIGEN_KVK) return res;
   const rijen = ctx.db.all<{ id: number; ai_voorstel: string | null; onderwerp: string | null; omschrijving: string | null }>(
     `SELECT f.id, f.ai_voorstel, e.onderwerp, f.omschrijving FROM inkoopfacturen f
      LEFT JOIN email_berichten e ON e.id = f.email_bericht_id WHERE f.status = 'te_beoordelen'`,
   );
   for (const r of rijen) {
-    let eigen = isEigenOnderwerp(ctx, r.onderwerp ?? r.omschrijving);
-    if (!eigen && r.ai_voorstel) {
+    let voorstelEigen = false;
+    if (r.ai_voorstel) {
       try {
-        eigen = isEigenLeverancier(ctx, JSON.parse(r.ai_voorstel).leverancier ?? {});
+        voorstelEigen = isEigenLeverancier(ctx, JSON.parse(r.ai_voorstel).leverancier ?? {});
       } catch {
-        // ongeldig voorstel: negeren
+        // ongeldig voorstel
       }
     }
-    if (eigen && negeerEigenFactuur(ctx, r.id, "opgeruimd: eigen factuur")) n++;
+    try {
+      if (voorstelEigen) {
+        const o = zetOmNaarVerkoop(ctx, r.id, "systeem");
+        if (o.bestondAl) res.verwijderd++;
+        else res.omgezet++;
+      } else if (isEigenOnderwerp(ctx, r.onderwerp ?? r.omschrijving) && mollieIngesteld(ctx)) {
+        if (negeerEigenFactuur(ctx, r.id, "opgeruimd: kopie van Mollie-factuur")) res.verwijderd++;
+      }
+    } catch (e) {
+      ctx.log.warn(`Eigen factuur #${r.id} niet verwerkt: ${(e as Error).message}`);
+    }
   }
-  return n;
+  return res;
 }

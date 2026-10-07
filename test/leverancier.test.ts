@@ -9,6 +9,7 @@ import { nieuweInkoopfactuur } from "../src/modules/facturen/service.ts";
 const voorstel = (naam = "Google Ireland Limited"): AiVoorstel => ({
   is_factuur: true,
   leverancier: { naam, btw_nummer: "IE 6388047V", kvk: "KvK: 1234-5678", iban: "ie29 aibk 9311 5212 3456 78", email: "geen e-mail", adres: "Gordon House, Barrow Street", postcode: "D04 E5W5", plaats: "Dublin", land: "ie" },
+  ontvanger: null,
   factuurnummer: "5123", factuurdatum: "2026-09-30", vervaldatum: null, valuta: "EUR", is_creditnota: false, btw_verlegd: true,
   regels: [{ omschrijving: "Ads", bedrag_excl: 250, btw_tarief: 0, btw_bedrag: 0 }], totaal_excl: 250, totaal_btw: 0, totaal_incl: 250,
   al_betaald: true, voorgestelde_categorie: "Advertentiekosten", opmerkingen: null,

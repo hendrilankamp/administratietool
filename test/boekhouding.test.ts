@@ -85,6 +85,7 @@ test("AI-voorstel: BTW-code keuze, controles en leveranciermatch", async () => {
     const voorstel: AiVoorstel = {
       is_factuur: true,
       leverancier: { naam: "Google Ireland Limited", btw_nummer: "IE6388047V", kvk: null, iban: null, email: null, adres: null, postcode: null, plaats: "Dublin", land: "IE" },
+      ontvanger: null,
       factuurnummer: "5123456789",
       factuurdatum: "2026-09-30",
       vervaldatum: null,
@@ -157,6 +158,19 @@ test("Mollie: regels, BTW-codes en aansluiting op totalen", async () => {
     const res3 = await syncVerkoopfacturen(ctx, [{ ...mollieFactuur, status: "cancelled" }]);
     assert.equal(res3.bijgewerkt, 1);
     assert.equal(ctx.db.get<{ status: string }>("SELECT status FROM verkoopfacturen WHERE id = ?", [f.id])!.status, "vervallen");
+  } finally {
+    ctx.opruimen();
+  }
+});
+
+test("Mollie vervangt een omgezet concept met hetzelfde factuurnummer (geen dubbele verkoop)", async () => {
+  const ctx = await testCtx();
+  try {
+    ctx.db.run("INSERT INTO verkoopfacturen (factuurnummer, status, bron, totaal_incl) VALUES ('2026-0042', 'concept', 'handmatig', 26162)");
+    const res = await syncVerkoopfacturen(ctx, [mollieFactuur]);
+    assert.equal(res.nieuw, 1);
+    const rijen = ctx.db.all<{ bron: string }>("SELECT bron FROM verkoopfacturen WHERE factuurnummer = '2026-0042'");
+    assert.deepEqual(rijen.map((r) => r.bron), ["mollie"]);
   } finally {
     ctx.opruimen();
   }

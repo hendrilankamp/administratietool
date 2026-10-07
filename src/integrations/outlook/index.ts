@@ -7,6 +7,7 @@ import { ontsleutel, versleutel } from "../../lib/crypto.ts";
 import { bewaarBijlage, detecteerType, MAX_BIJLAGE } from "../../lib/bijlagen.ts";
 import { nieuweInkoopfactuur } from "../../modules/facturen/service.ts";
 import { isEigenOnderwerp } from "../../modules/facturen/eigen.ts";
+import { mollieIngesteld } from "../mollie/index.ts";
 
 // Mail.ReadWrite.Shared: nodig om een gedeelde mailbox te lezen waar de ingelogde gebruiker toegang toe heeft
 const SCOPES = ["Mail.ReadWrite", "Mail.ReadWrite.Shared", "offline_access"];
@@ -263,9 +264,9 @@ async function verwerkBericht(ctx: Ctx, b: Bericht, res: MailResultaat): Promise
 
   let aantal = 0;
   const fouten: string[] = [];
-  if (isEigenOnderwerp(ctx, b.subject)) {
-    // Eigen verkoopfactuur (bcc / kopie van Mollie): niet bij de inkoop zetten
-    ctx.db.run("UPDATE email_berichten SET fout = ? WHERE id = ?", ["Eigen factuur; niet als inkoop verwerkt", berichtId]);
+  if (isEigenOnderwerp(ctx, b.subject) && mollieIngesteld(ctx)) {
+    // Kopie van een Mollie-factuur: komt al via de Mollie-koppeling binnen
+    ctx.db.run("UPDATE email_berichten SET fout = ? WHERE id = ?", ["Eigen factuur (Mollie); niet als inkoop verwerkt", berichtId]);
     return;
   }
   if (b.hasAttachments) {

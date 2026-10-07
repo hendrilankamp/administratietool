@@ -244,6 +244,23 @@ export async function syncVerkoopfacturen(ctx: Ctx, facturen?: MollieSalesInvoic
       continue;
     }
 
+    // Bestaat dit factuurnummer al als handmatige verkoopfactuur (bv. omgezet vanuit de inkoop)?
+    if (inv.invoiceNumber) {
+      const handmatig = ctx.db.get<{ id: number; status: string }>(
+        "SELECT id, status FROM verkoopfacturen WHERE factuurnummer = ? AND bron = 'handmatig' LIMIT 1",
+        [inv.invoiceNumber],
+      );
+      if (handmatig?.status === "geboekt") {
+        res.waarschuwingen.push(`Mollie-factuur ${inv.invoiceNumber} staat al als handmatig geboekte verkoopfactuur (#${handmatig.id}); niet dubbel geïmporteerd.`);
+        res.overgeslagen++;
+        continue;
+      }
+      if (handmatig && !ctx.db.get("SELECT 1 FROM transactie_koppelingen WHERE verkoopfactuur_id = ?", [handmatig.id])) {
+        ctx.db.run("DELETE FROM verkoopfacturen WHERE id = ?", [handmatig.id]);
+        audit(ctx.db, "mollie", "concept_vervangen_door_mollie", "verkoopfacturen", handmatig.id, { mollie_id: inv.id });
+      }
+    }
+
     const relatieId = relatieVoorOntvanger(ctx, inv);
     const pdf = await haalPdf(ctx, inv);
     if (status === "geboekt" && isAfgesloten(ctx.db, factuurdatum)) {

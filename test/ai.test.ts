@@ -15,6 +15,7 @@ function voorstel(leverancier: string, btw: string | null = null): AiVoorstel {
   return {
     is_factuur: true,
     leverancier: { naam: leverancier, btw_nummer: btw, kvk: null, iban: null, email: null, adres: null, postcode: null, plaats: null, land: "NL" },
+    ontvanger: null,
     factuurnummer: "F1",
     factuurdatum: "2026-10-01",
     vervaldatum: null,
@@ -97,7 +98,7 @@ test("AI: Sonnet met effort low, verbruik vastgelegd, maandlimiet en paginalimie
   }
 });
 
-test("eigen facturen worden herkend en niet als inkoop geboekt", async () => {
+test("eigen facturen worden herkend en omgezet naar verkoop (of verwijderd als dubbel)", async () => {
   const ctx = await testCtx({ ANTHROPIC_API_KEY: "sk-ant-test-0123456789" });
   try {
     slaInstellingenOp(ctx, [{ sleutel: "EIGEN_NAAM", waarde: "Medialan" }, { sleutel: "EIGEN_BTW", waarde: "NL 0012.34567.B01" }], "t");
@@ -108,24 +109,57 @@ test("eigen facturen worden herkend en niet als inkoop geboekt", async () => {
     assert.ok(isEigenLeverancier(ctx, { naam: "Iets anders", btw_nummer: "NL001234567B01" }));
     assert.ok(!isEigenLeverancier(ctx, { naam: "Mediamarkt" }));
 
-    // Na AI-voorstel met eigen bedrijf als leverancier: verwijderd uit 'te beoordelen'
+    // AI herkent eigen bedrijf als afzender -> verkoopfactuur (concept) met klant uit de geadresseerde
     const teller = { n: 0 };
-    const id = nieuweInkoopfactuur(ctx, "email", { bijlage: bewaarBijlage(ctx, pdf(1), "f.pdf").sha256, aiStatus: "wachtrij", gebruiker: "t", omschrijving: "Fwd: factuur" });
-    await leesFactuurUit(ctx, id, nepClient(voorstel("Medialan"), teller));
-    assert.equal(ctx.db.get("SELECT id FROM inkoopfacturen WHERE id = ?", [id]), undefined);
+    const eigen = { ...voorstel("Medialan", "NL001234567B01"), factuurnummer: "2021-00131", ontvanger: { naam: "Nijkamp stoffering", btw_nummer: null, kvk: null, email: null, adres: null, postcode: null, plaats: "Rijssen", land: "NL" } };
+    const id = nieuweInkoopfactuur(ctx, "email", { bijlage: bewaarBijlage(ctx, pdf(1), "f.pdf").sha256, aiStatus: "wachtrij", gebruiker: "t", omschrijving: "Re: Office licenties" });
+    await leesFactuurUit(ctx, id, nepClient(eigen, teller));
+    assert.equal(ctx.db.get("SELECT id FROM inkoopfacturen WHERE id = ?", [id]), undefined, "niet meer bij inkoop");
+    const vk = ctx.db.get<{ id: number; status: string; factuurnummer: string; totaal_incl: number; relatie_id: number; bijlage_sha256: string }>("SELECT * FROM verkoopfacturen WHERE factuurnummer = '2021-00131'")!;
+    assert.equal(vk.status, "concept");
+    assert.equal(vk.totaal_incl, 1210);
+    assert.ok(vk.bijlage_sha256);
+    const klant = ctx.db.get<{ naam: string; type: string }>("SELECT naam, type FROM relaties WHERE id = ?", [vk.relatie_id])!;
+    assert.deepEqual({ ...klant }, { naam: "Nijkamp stoffering", type: "klant" });
+    const regel = ctx.db.get<{ btw_code: string; categorie_id: number }>("SELECT btw_code, categorie_id FROM verkoopfactuur_regels WHERE factuur_id = ?", [vk.id])!;
+    assert.equal(regel.btw_code, "NL21");
+    assert.equal(regel.categorie_id, categorieId(ctx, "Omzet"));
 
-    // Op onderwerp: zonder AI-aanroep
-    const id2 = nieuweInkoopfactuur(ctx, "email", { bijlage: bewaarBijlage(ctx, pdf(1), "g.pdf").sha256, aiStatus: "wachtrij", gebruiker: "t", omschrijving: "Nieuwe factuur van Medialan" });
-    await leesFactuurUit(ctx, id2, nepClient(voorstel("x"), teller));
-    assert.equal(teller.n, 1, "geen tweede AI-aanroep");
+    // Zelfde factuur nog eens binnen (bv. nog een bcc) -> dubbele inkoop verwijderd, geen tweede verkoop
+    const id2 = nieuweInkoopfactuur(ctx, "email", { bijlage: bewaarBijlage(ctx, pdf(1), "g.pdf").sha256, aiStatus: "wachtrij", gebruiker: "t" });
+    await leesFactuurUit(ctx, id2, nepClient(eigen, teller));
+    assert.equal(ctx.db.get<{ n: number }>("SELECT COUNT(*) AS n FROM verkoopfacturen WHERE factuurnummer = '2021-00131'")!.n, 1);
     assert.equal(ctx.db.get("SELECT id FROM inkoopfacturen WHERE id = ?", [id2]), undefined);
 
-    // Opruimen van bestaande items
-    const id3 = nieuweInkoopfactuur(ctx, "email", { gebruiker: "t", omschrijving: "Nieuwe factuur van Medialan" });
-    const id4 = nieuweInkoopfactuur(ctx, "email", { gebruiker: "t", omschrijving: "Factuur KPN" });
-    assert.equal(ruimEigenFacturenOp(ctx), 1);
-    assert.equal(ctx.db.get("SELECT id FROM inkoopfacturen WHERE id = ?", [id3]), undefined);
-    assert.ok(ctx.db.get("SELECT id FROM inkoopfacturen WHERE id = ?", [id4]));
+    // Zonder Mollie: onderwerp "factuur van Medialan" gaat gewoon naar de AI (kan niet weg, want niet via Mollie binnen)
+    const n0 = teller.n;
+    const id3 = nieuweInkoopfactuur(ctx, "email", { bijlage: bewaarBijlage(ctx, pdf(1), "h.pdf").sha256, aiStatus: "wachtrij", gebruiker: "t", omschrijving: "Nieuwe factuur van Medialan" });
+    await leesFactuurUit(ctx, id3, nepClient({ ...eigen, factuurnummer: "I-2026-0042" }, teller));
+    assert.equal(teller.n, n0 + 1);
+    assert.ok(ctx.db.get("SELECT id FROM verkoopfacturen WHERE factuurnummer = 'I-2026-0042'"));
+  } finally {
+    ctx.opruimen();
+  }
+});
+
+test("met Mollie: kopie op onderwerp wordt zonder AI verwijderd; opruimen zet bestaande om", async () => {
+  const ctx = await testCtx({ ANTHROPIC_API_KEY: "sk-ant-test-0123456789", MOLLIE_TOKEN: "access_test1234567890" });
+  try {
+    slaInstellingenOp(ctx, [{ sleutel: "EIGEN_NAAM", waarde: "Medialan" }], "t");
+    const teller = { n: 0 };
+    const id = nieuweInkoopfactuur(ctx, "email", { bijlage: bewaarBijlage(ctx, pdf(1), "g.pdf").sha256, aiStatus: "wachtrij", gebruiker: "t", omschrijving: "Nieuwe factuur van Medialan" });
+    await leesFactuurUit(ctx, id, nepClient(voorstel("x"), teller));
+    assert.equal(teller.n, 0, "geen AI-aanroep");
+    assert.equal(ctx.db.get("SELECT id FROM inkoopfacturen WHERE id = ?", [id]), undefined);
+
+    const kopie = nieuweInkoopfactuur(ctx, "email", { gebruiker: "t", omschrijving: "Nieuwe factuur van Medialan" });
+    const metVoorstel = nieuweInkoopfactuur(ctx, "email", { gebruiker: "t", omschrijving: "Re: licenties" });
+    ctx.db.run("UPDATE inkoopfacturen SET ai_voorstel = ? WHERE id = ?", [JSON.stringify({ ...voorstel("Medialan"), factuurnummer: "2021-00099" }), metVoorstel]);
+    const ander = nieuweInkoopfactuur(ctx, "email", { gebruiker: "t", omschrijving: "Factuur KPN" });
+    assert.deepEqual(ruimEigenFacturenOp(ctx), { omgezet: 1, verwijderd: 1 });
+    assert.equal(ctx.db.get("SELECT id FROM inkoopfacturen WHERE id = ?", [kopie]), undefined);
+    assert.ok(ctx.db.get("SELECT id FROM verkoopfacturen WHERE factuurnummer = '2021-00099'"));
+    assert.ok(ctx.db.get("SELECT id FROM inkoopfacturen WHERE id = ?", [ander]));
   } finally {
     ctx.opruimen();
   }

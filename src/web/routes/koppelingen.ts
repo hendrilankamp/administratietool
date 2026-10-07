@@ -68,7 +68,7 @@ export function koppelingenRoutes(ctx: Ctx, r: Router): void {
     let extra = "";
     if (sectie === "bedrijf") {
       const n = ruimEigenFacturenOp(ctx);
-      if (n) extra = ` ${n} eigen factuur/facturen uit "te beoordelen" verwijderd.`;
+      if (n.omgezet || n.verwijderd) extra = ` Eigen facturen in "te beoordelen": ${n.omgezet} omgezet naar verkoop (concept), ${n.verwijderd} dubbele verwijderd.`;
     }
     klaar(ctx, req, res, `/instellingen#${sectie === "mailbox" ? "outlook" : sectie}`, `Instellingen opgeslagen.${extra}`);
   });

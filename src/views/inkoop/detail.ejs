@@ -29,7 +29,11 @@
           <a class="knop" href="/relaties/nieuw?type=leverancier&amp;terug=/inkoop/<%= f.id %>">+ Nieuwe leverancier</a>
         </div>
       </div>
-      <% if (voorstel && !f.relatie_id) { const l = voorstel.leverancier; %>
+      <% if (!geboekt && eigenFactuur) { %>
+        <div class="melding let"><strong>Dit is een factuur van jullie zelf</strong> (afzender <%= voorstel.leverancier.naam %>)<%= voorstel.ontvanger ? ', gericht aan ' + voorstel.ontvanger.naam : '' %>. Die hoort bij de verkoop.
+          <div class="acties mb0"><button type="submit" form="naar-verkoop" class="klein primair">Omzetten naar verkoopfactuur</button></div></div>
+      <% } %>
+      <% if (voorstel && !f.relatie_id && !eigenFactuur) { const l = voorstel.leverancier; %>
         <div class="melding info">
           <strong>Nieuwe leverancier op deze factuur:</strong> <%= l.naam %><br>
           <span class="klein"><%= [l.btw_nummer && 'BTW ' + l.btw_nummer, l.kvk && 'KvK ' + l.kvk, l.iban, l.email, [l.adres, l.postcode, l.plaats].filter(Boolean).join(' '), l.land].filter(Boolean).join(' · ') %></span>
@@ -66,6 +70,9 @@
     <% if (voorstel && !f.relatie_id) { %>
       <form id="maak-lev" method="post" action="/inkoop/<%= f.id %>/leverancier-uit-voorstel" class="verborgen"><%- include('../partials/csrf') %></form>
     <% } %>
+    <% if (!geboekt) { %>
+      <form id="naar-verkoop" method="post" action="/inkoop/<%= f.id %>/naar-verkoop" class="verborgen" data-bevestig="Omzetten naar een verkoopfactuur (concept)? De klant wordt herkend of aangemaakt; daarna controleer je en boek je hem bij Verkoop."><%- include('../partials/csrf') %></form>
+    <% } %>
     <% if (aanvulling.length) { %>
       <form id="vul-lev" method="post" action="/inkoop/<%= f.id %>/leverancier-aanvullen" class="verborgen"><%- include('../partials/csrf') %></form>
     <% } %>
@@ -91,6 +98,7 @@
 
     <div class="acties">
       <% if (!geboekt && f.bijlage_sha256 && ai) { %><form method="post" action="/inkoop/<%= f.id %>/ai" class="inline" data-bevestig="De huidige regels worden vervangen door een nieuw AI-voorstel. Doorgaan?"><%- include('../partials/csrf') %><button type="submit">Opnieuw uitlezen met AI</button></form><% } %>
+      <% if (!geboekt) { %><button type="submit" form="naar-verkoop">Omzetten naar verkoopfactuur</button><% } %>
       <% if (!geboekt) { %><form method="post" action="/inkoop/<%= f.id %>/verwijderen" class="inline" data-bevestig="Deze factuur verwijderen?"><%- include('../partials/csrf') %><button class="gevaar" type="submit">Verwijderen</button></form><% } %>
       <% if (geboekt && !koppelingen.length) { %><form method="post" action="/inkoop/<%= f.id %>/terug-naar-beoordelen" class="inline" data-bevestig="Terugzetten naar te beoordelen? De factuur telt dan niet meer mee in de BTW."><%- include('../partials/csrf') %><button type="submit">Terug naar 'te beoordelen'</button></form><% } %>
       <a href="/instellingen/audit?zoek=<%= f.id %>" class="klein">Historie</a>
