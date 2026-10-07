@@ -104,6 +104,9 @@ export function vertaalMollieFactuur(ctx: Ctx, inv: MollieSalesInvoice, omzetCat
   const zakelijk = rec.type === "business" && !!rec.vatNumber;
   const inclusief = inv.vatMode === "inclusive";
   const regels = (inv.lines ?? []).map((l) => {
+    if (typeof l.vatRate !== "string" || !/^\d{1,2}(\.\d+)?$/.test(l.vatRate.trim())) {
+      throw new Error(`regel "${l.description ?? "?"}" heeft geen geldig BTW-tarief (${String(l.vatRate)})`);
+    }
     const code = mollieBtwCode(l.vatRate, rec.country, zakelijk);
     let bedrag = centen(l.unitPrice) * (l.quantity || 1);
     if (l.discount) {
@@ -120,6 +123,9 @@ export function vertaalMollieFactuur(ctx: Ctx, inv: MollieSalesInvoice, omzetCat
     };
   });
 
+  if (regels.some((r) => !Number.isFinite(r.bedrag_excl) || !Number.isFinite(r.btw_bedrag))) {
+    throw new Error("onverwachte of ontbrekende bedragen/BTW-tarieven in de factuurregels");
+  }
   // Aansluiten op de totalen van Mollie (factuurkorting, afronding)
   const doelExcl = centen(inv.discountedSubtotalAmount ?? inv.subtotalAmount);
   const doelBtw = centen(inv.totalVatAmount);
@@ -186,6 +192,7 @@ export interface MollieSyncResultaat {
   nieuw: number;
   bijgewerkt: number;
   overgeslagen: number;
+  fouten: number;
   waarschuwingen: string[];
 }
 
@@ -193,9 +200,10 @@ export interface MollieSyncResultaat {
 export async function syncVerkoopfacturen(ctx: Ctx, facturen?: MollieSalesInvoice[]): Promise<MollieSyncResultaat> {
   const lijst = facturen ?? (await alles<MollieSalesInvoice>(ctx, "/sales-invoices?limit=250"));
   const omzet = categorieen(ctx).find((c) => c.soort === "omzet")?.id ?? null;
-  const res: MollieSyncResultaat = { nieuw: 0, bijgewerkt: 0, overgeslagen: 0, waarschuwingen: [] };
+  const res: MollieSyncResultaat = { nieuw: 0, bijgewerkt: 0, overgeslagen: 0, fouten: 0, waarschuwingen: [] };
 
-  for (const inv of lijst) {
+  // Eén afwijkende factuur mag de rest niet tegenhouden
+  const verwerkEen = async (inv: MollieSalesInvoice): Promise<void> => {
     const status = statusVoorMollie(inv.status);
     const bestaand = ctx.db.get<{ id: number; status: string; factuurdatum: string | null; totaal_incl: number; bijlage_sha256: string | null; mollie_status: string }>(
       "SELECT id, status, factuurdatum, totaal_incl, bijlage_sha256, mollie_status FROM verkoopfacturen WHERE mollie_id = ?",
@@ -203,7 +211,7 @@ export async function syncVerkoopfacturen(ctx: Ctx, facturen?: MollieSalesInvoic
     );
     if (!status) {
       res.overgeslagen++;
-      continue;
+      return;
     }
     const factuurdatum = datumDeel(inv.issuedAt) ?? datumDeel(inv.createdAt);
     const regels = vertaalMollieFactuur(ctx, inv, omzet);
@@ -217,7 +225,7 @@ export async function syncVerkoopfacturen(ctx: Ctx, facturen?: MollieSalesInvoic
       if ((bedragGewijzigd || statusGewijzigd) && bestaand.status === "geboekt" && isAfgesloten(ctx.db, bestaand.factuurdatum)) {
         res.waarschuwingen.push(`Mollie-factuur ${inv.invoiceNumber ?? inv.id} is gewijzigd (${inv.status}) maar valt in een afgesloten periode; niet aangepast. Corrigeer via een creditfactuur.`);
         ctx.db.run("UPDATE verkoopfacturen SET mollie_status = ?, mollie_betaald_op = ?, mollie_betaalreferenties = ? WHERE id = ?", [inv.status, datumDeel(inv.paidAt), referenties, bestaand.id]);
-        continue;
+        return;
       }
       const pdf = bestaand.bijlage_sha256 ?? (await haalPdf(ctx, inv));
       ctx.db.tx(() => {
@@ -241,7 +249,7 @@ export async function syncVerkoopfacturen(ctx: Ctx, facturen?: MollieSalesInvoic
           res.bijgewerkt++;
         }
       });
-      continue;
+      return;
     }
 
     // Bestaat dit factuurnummer al als handmatige verkoopfactuur (bv. omgezet vanuit de inkoop)?
@@ -253,7 +261,7 @@ export async function syncVerkoopfacturen(ctx: Ctx, facturen?: MollieSalesInvoic
       if (handmatig?.status === "geboekt") {
         res.waarschuwingen.push(`Mollie-factuur ${inv.invoiceNumber} staat al als handmatig geboekte verkoopfactuur (#${handmatig.id}); niet dubbel geïmporteerd.`);
         res.overgeslagen++;
-        continue;
+        return;
       }
       if (handmatig && !ctx.db.get("SELECT 1 FROM transactie_koppelingen WHERE verkoopfactuur_id = ?", [handmatig.id])) {
         ctx.db.run("DELETE FROM verkoopfacturen WHERE id = ?", [handmatig.id]);
@@ -283,6 +291,14 @@ export async function syncVerkoopfacturen(ctx: Ctx, facturen?: MollieSalesInvoic
       audit(ctx.db, "mollie", "geimporteerd", "verkoopfacturen", id, { mollie_id: inv.id, status: inv.status });
     });
     res.nieuw++;
+  };
+  for (const inv of lijst) {
+    try {
+      await verwerkEen(inv);
+    } catch (e) {
+      res.fouten++;
+      res.waarschuwingen.push(`Mollie-factuur ${inv.invoiceNumber ?? inv.id} niet verwerkt: ${(e as Error).message}`);
+    }
   }
   return res;
 }
@@ -365,5 +381,5 @@ export async function syncMollie(ctx: Ctx): Promise<string> {
     uit = ` (uitbetalingen niet opgehaald: ${(e as Error).message})`;
   }
   for (const w of r.waarschuwingen) ctx.log.warn(w);
-  return `${r.nieuw} nieuw, ${r.bijgewerkt} bijgewerkt${uit}${r.waarschuwingen.length ? `; ${r.waarschuwingen.length} waarschuwing(en): ${r.waarschuwingen.join(" | ")}` : ""}`;
+  return `${r.nieuw} nieuw, ${r.bijgewerkt} bijgewerkt${r.fouten ? `, ${r.fouten} met fout` : ""}${uit}${r.waarschuwingen.length ? `; ${r.waarschuwingen.length} waarschuwing(en): ${r.waarschuwingen.join(" | ")}` : ""}`;
 }

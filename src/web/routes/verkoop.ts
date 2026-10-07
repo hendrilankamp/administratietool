@@ -23,7 +23,9 @@ export function verkoopRouter(ctx: Ctx, diensten: Diensten): Router {
   });
 
   r.post("/mollie-sync", async (req, res) => {
-    const m = await diensten.mollieSync();
+    const m = await diensten.mollieSync().catch((e: Error) => {
+      throw new GebruikersFout(`Mollie-synchronisatie mislukt: ${e.message}`, 502);
+    });
     klaar(ctx, req, res, "/verkoop", m ? `Mollie: ${m}` : "Synchronisatie draait al.");
   });
 

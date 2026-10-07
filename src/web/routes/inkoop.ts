@@ -85,7 +85,9 @@ export function inkoopRouter(ctx: Ctx, diensten: Diensten): Router {
   });
 
   r.post("/outlook", async (req, res) => {
-    const m = await diensten.outlookOphalen();
+    const m = await diensten.outlookOphalen().catch((e: Error) => {
+      throw new GebruikersFout(`Ophalen uit Outlook mislukt: ${e.message}`, 502);
+    });
     klaar(ctx, req, res, "/inkoop", m ?? "Ophalen draait al.");
   });
 

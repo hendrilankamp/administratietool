@@ -175,3 +175,16 @@ test("Mollie vervangt een omgezet concept met hetzelfde factuurnummer (geen dubb
     ctx.opruimen();
   }
 });
+
+test("Mollie: één afwijkende factuur stopt de synchronisatie niet", async () => {
+  const ctx = await testCtx();
+  try {
+    const kapot = { ...mollieFactuur, id: "invoice_kapot", invoiceNumber: "2026-0099", lines: [{ description: "x", quantity: 1, unitPrice: { currency: "EUR", value: "10.00" } }] } as unknown as MollieSalesInvoice;
+    const res = await syncVerkoopfacturen(ctx, [kapot, mollieFactuur]);
+    assert.equal(res.nieuw, 1);
+    assert.equal(res.fouten, 1);
+    assert.match(res.waarschuwingen.join(" "), /2026-0099 niet verwerkt/);
+  } finally {
+    ctx.opruimen();
+  }
+});
