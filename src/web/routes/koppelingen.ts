@@ -26,8 +26,14 @@ export function koppelingenRoutes(ctx: Ctx, r: Router): void {
     const b = req.body as Record<string, unknown>;
     const sectie = String(b.sectie ?? "");
     const wijzigingen: Wijziging[] = [];
-    const veld = (k: InstelSleutel, soort: "tekst" | "getal" | "vinkje" = "tekst") => {
+    const veld = (k: InstelSleutel, soort: "tekst" | "getal" | "vinkje" | "lijst" = "tekst") => {
       if (b[`wis_${k}`] === "1") return wijzigingen.push({ sleutel: k, waarde: null });
+      if (soort === "lijst") {
+        // Eén waarde per regel (bij nummers mag ook een komma of puntkomma)
+        const scheiding = k === "EIGEN_NAAM" ? /\r?\n/ : /[\r\n,;]+/;
+        const items = String(b[k] ?? "").split(scheiding).map((x) => x.trim()).filter(Boolean);
+        return wijzigingen.push({ sleutel: k, waarde: items.length ? [...new Set(items)] : null });
+      }
       if (soort === "vinkje") return wijzigingen.push({ sleutel: k, waarde: b[k] === "1" });
       let t = tekst(b[k], 500);
       // Bij kopiëren uit portals komen soms onzichtbare tekens of labels mee: haal er de GUID uit
@@ -48,9 +54,9 @@ export function koppelingenRoutes(ctx: Ctx, r: Router): void {
       veld("AI_LIMIET_MAAND", "getal");
       veld("AI_MAX_PAGINAS", "getal");
     } else if (sectie === "bedrijf") {
-      veld("EIGEN_NAAM");
-      veld("EIGEN_BTW");
-      veld("EIGEN_KVK");
+      veld("EIGEN_NAAM", "lijst");
+      veld("EIGEN_BTW", "lijst");
+      veld("EIGEN_KVK", "lijst");
     } else if (sectie === "outlook") {
       veld("MS_CLIENT_ID");
       veld("MS_TENANT_ID");

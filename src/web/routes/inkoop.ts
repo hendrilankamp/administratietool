@@ -9,7 +9,7 @@ import { factuurLijst, haalFactuur, nieuweInkoopfactuur, verwijderFactuur, werkF
 import { categorieen, haalRelatie, relaties, slaRelatieOp } from "../../modules/relaties/service.ts";
 import { haalTransactie } from "../../modules/bank/service.ts";
 import { zetOmNaarVerkoop } from "../../modules/facturen/omzetten.ts";
-import { isEigenLeverancier } from "../../modules/facturen/eigen.ts";
+import { eigenGegevensIngesteld, isEigenLeverancier } from "../../modules/facturen/eigen.ts";
 import { aanvullingen, koppelLeverancierAanFactuur, koppelOnbekendeLeveranciers, leverancierVelden, VELD_NAAM, vulLeverancierAan } from "../../modules/facturen/leverancier-uit-factuur.ts";
 import { csrfNaUpload } from "../sessie.ts";
 import { datum, geheel, idParam, klaar, lijst, regelsUitFormulier, render, tekst } from "../render.ts";
@@ -117,7 +117,7 @@ export function inkoopRouter(ctx: Ctx, diensten: Diensten): Router {
       btwCodes: btwCodes(ctx.db).filter((c) => c.soort !== "verkoop"),
       ai: aiBeschikbaar(ctx),
       eigenFactuur: !!voorstel && isEigenLeverancier(ctx, voorstel.leverancier),
-      eigenNaamIngesteld: !!ctx.config.EIGEN_NAAM,
+      eigenNaamIngesteld: eigenGegevensIngesteld(ctx),
     });
   });
 

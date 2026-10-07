@@ -101,12 +101,14 @@ test("AI: Sonnet met effort low, verbruik vastgelegd, maandlimiet en paginalimie
 test("eigen facturen worden herkend en omgezet naar verkoop (of verwijderd als dubbel)", async () => {
   const ctx = await testCtx({ ANTHROPIC_API_KEY: "sk-ant-test-0123456789" });
   try {
-    slaInstellingenOp(ctx, [{ sleutel: "EIGEN_NAAM", waarde: "Medialan" }, { sleutel: "EIGEN_BTW", waarde: "NL 0012.34567.B01" }], "t");
+    slaInstellingenOp(ctx, [{ sleutel: "EIGEN_NAAM", waarde: ["Medialan"] }, { sleutel: "EIGEN_BTW", waarde: ["NL 0012.34567.B01", "NL215839572B01"] }], "t");
     assert.ok(isEigenOnderwerp(ctx, "Nieuwe factuur van Medialan"));
     assert.ok(isEigenOnderwerp(ctx, "Invoice from MEDIALAN"));
     assert.ok(!isEigenOnderwerp(ctx, "Factuur van KPN voor Medialan"));
     assert.ok(isEigenLeverancier(ctx, { naam: "Medialan B.V." }));
-    assert.ok(isEigenLeverancier(ctx, { naam: "Iets anders", btw_nummer: "NL001234567B01" }));
+    assert.ok(isEigenLeverancier(ctx, { naam: "Iets anders", btw_nummer: "NL001234567B01" }), "nieuw BTW-nummer");
+    assert.ok(isEigenLeverancier(ctx, { naam: "Iets anders", btw_nummer: "NL215839572B01" }), "oud BTW-nummer");
+    assert.throws(() => slaInstellingenOp(ctx, [{ sleutel: "EIGEN_BTW", waarde: ["NL001234567B01", "onzin"] }], "t"), /Ongeldig BTW-nummer/);
     assert.ok(!isEigenLeverancier(ctx, { naam: "Mediamarkt" }));
 
     // AI herkent eigen bedrijf als afzender -> verkoopfactuur (concept) met klant uit de geadresseerde
@@ -145,7 +147,7 @@ test("eigen facturen worden herkend en omgezet naar verkoop (of verwijderd als d
 test("met Mollie: kopie op onderwerp wordt zonder AI verwijderd; opruimen zet bestaande om", async () => {
   const ctx = await testCtx({ ANTHROPIC_API_KEY: "sk-ant-test-0123456789", MOLLIE_TOKEN: "access_test1234567890" });
   try {
-    slaInstellingenOp(ctx, [{ sleutel: "EIGEN_NAAM", waarde: "Medialan" }], "t");
+    slaInstellingenOp(ctx, [{ sleutel: "EIGEN_NAAM", waarde: ["Medialan"] }], "t");
     const teller = { n: 0 };
     const id = nieuweInkoopfactuur(ctx, "email", { bijlage: bewaarBijlage(ctx, pdf(1), "g.pdf").sha256, aiStatus: "wachtrij", gebruiker: "t", omschrijving: "Nieuwe factuur van Medialan" });
     await leesFactuurUit(ctx, id, nepClient(voorstel("x"), teller));

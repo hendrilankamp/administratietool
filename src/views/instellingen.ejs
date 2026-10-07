@@ -25,12 +25,15 @@
 <div class="paneel" id="bedrijf">
   <h2 class="mb0">Bedrijfsgegevens</h2>
   <p class="hulp">Hiermee herkent de app jullie eigen facturen (bv. als je in de bcc staat of Mollie een kopie stuurt) en zet ze niet bij de inkoop. Ze worden ook niet door de AI uitgelezen.</p>
-  <form method="post" action="/instellingen/koppelingen" class="rij">
+  <% const alsTekst = (w) => Array.isArray(w) ? w.join('\n') : (w || ''); %>
+  <form method="post" action="/instellingen/koppelingen">
     <%- include('partials/csrf') %><input type="hidden" name="sectie" value="bedrijf">
-    <div><label>Bedrijfsnaam</label><input name="EIGEN_NAAM" value="<%= k.EIGEN_NAAM.waarde || '' %>" placeholder="Medialan"></div>
-    <div class="smal"><label>BTW-nummer</label><input name="EIGEN_BTW" value="<%= k.EIGEN_BTW.waarde || '' %>" placeholder="NL001234567B01"></div>
-    <div class="smal"><label>KvK-nummer</label><input name="EIGEN_KVK" value="<%= k.EIGEN_KVK.waarde || '' %>"></div>
-    <div class="smal"><button class="primair" type="submit">Opslaan</button></div>
+    <div class="rij">
+      <div><label>Bedrijfsnaam (één per regel, bv. ook een oude handelsnaam)</label><textarea name="EIGEN_NAAM" rows="3" placeholder="Medialan"><%= alsTekst(k.EIGEN_NAAM.waarde) %></textarea></div>
+      <div><label>BTW-nummers (één per regel, oud én nieuw)</label><textarea name="EIGEN_BTW" rows="3" placeholder="NL001234567B01&#10;NL009876543B01"><%= alsTekst(k.EIGEN_BTW.waarde) %></textarea></div>
+      <div><label>KvK-nummers (één per regel)</label><textarea name="EIGEN_KVK" rows="3"><%= alsTekst(k.EIGEN_KVK.waarde) %></textarea></div>
+    </div>
+    <div class="acties"><button class="primair" type="submit">Opslaan</button><span class="hulp">Een factuur geldt als eigen factuur zodra een van deze namen of nummers als afzender voorkomt.</span></div>
   </form>
 </div>
 

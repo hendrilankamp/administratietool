@@ -9,24 +9,43 @@ import { mollieIngesteld } from "../../integrations/mollie/index.ts";
  * of Mollie een kopie stuurt ("Nieuwe factuur van Medialan"). Die horen niet bij de inkoop.
  */
 
+/** Waarden van een bedrijfsgegeven als lijst (instelling kan een lijst zijn, omgevingsvariabele komma-gescheiden). */
+export function eigenWaarden(ctx: Ctx, sleutel: "EIGEN_NAAM" | "EIGEN_BTW" | "EIGEN_KVK"): string[] {
+  const w = (ctx.config as unknown as Record<string, unknown>)[sleutel];
+  const lijst = Array.isArray(w) ? w : typeof w === "string" ? w.split(sleutel === "EIGEN_NAAM" ? /\n/ : /[\n,;]+/) : [];
+  return lijst.map((x) => String(x).trim()).filter(Boolean);
+}
+
+export function eigenGegevensIngesteld(ctx: Ctx): boolean {
+  return eigenWaarden(ctx, "EIGEN_NAAM").length + eigenWaarden(ctx, "EIGEN_BTW").length + eigenWaarden(ctx, "EIGEN_KVK").length > 0;
+}
+
 const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /** Onderwerp zoals "Nieuwe factuur van Medialan" / "Invoice from Medialan" / "Uw factuur van Medialan". */
 export function isEigenOnderwerp(ctx: Ctx, onderwerp: string | null | undefined): boolean {
-  const naam = ctx.config.EIGEN_NAAM?.trim();
-  if (!naam || !onderwerp) return false;
-  return new RegExp(`\\b(factuur|invoice|creditnota|credit note)\\s+(van|from)\\s+${escapeRegex(naam)}\\b`, "i").test(onderwerp);
+  if (!onderwerp) return false;
+  return eigenWaarden(ctx, "EIGEN_NAAM").some((naam) =>
+    new RegExp(`\\b(factuur|invoice|creditnota|credit note)\\s+(van|from)\\s+${escapeRegex(naam)}\\b`, "i").test(onderwerp),
+  );
 }
 
 /** Leverancier op de factuur is ons eigen bedrijf (BTW-nummer, KvK of naam). */
 export function isEigenLeverancier(ctx: Ctx, l: { naam?: string | null; btw_nummer?: string | null; kvk?: string | null }): boolean {
-  const { EIGEN_NAAM, EIGEN_BTW, EIGEN_KVK } = ctx.config;
-  if (EIGEN_BTW && l.btw_nummer && normaliseerBtwNummer(l.btw_nummer) === normaliseerBtwNummer(EIGEN_BTW)) return true;
-  if (EIGEN_KVK && l.kvk && l.kvk.replace(/\D/g, "") === EIGEN_KVK) return true;
-  if (EIGEN_NAAM && l.naam) {
+  if (l.btw_nummer) {
+    const btw = normaliseerBtwNummer(l.btw_nummer);
+    if (eigenWaarden(ctx, "EIGEN_BTW").some((e) => normaliseerBtwNummer(e) === btw)) return true;
+  }
+  if (l.kvk) {
+    const kvk = l.kvk.replace(/\D/g, "");
+    if (eigenWaarden(ctx, "EIGEN_KVK").some((e) => e.replace(/\D/g, "") === kvk)) return true;
+  }
+  if (l.naam) {
     const a = normNaam(l.naam);
-    const b = normNaam(EIGEN_NAAM);
-    return b.length >= 3 && (a === b || (a.startsWith(b) && a.length - b.length <= 4));
+    return eigenWaarden(ctx, "EIGEN_NAAM").some((naam) => {
+      const b = normNaam(naam);
+      return b.length >= 3 && (a === b || (a.startsWith(b) && a.length - b.length <= 4));
+    });
   }
   return false;
 }
@@ -47,7 +66,7 @@ export function negeerEigenFactuur(ctx: Ctx, factuurId: number, reden: string): 
  */
 export function ruimEigenFacturenOp(ctx: Ctx): { omgezet: number; verwijderd: number } {
   const res = { omgezet: 0, verwijderd: 0 };
-  if (!ctx.config.EIGEN_NAAM && !ctx.config.EIGEN_BTW && !ctx.config.EIGEN_KVK) return res;
+  if (!eigenGegevensIngesteld(ctx)) return res;
   const rijen = ctx.db.all<{ id: number; ai_voorstel: string | null; onderwerp: string | null; omschrijving: string | null }>(
     `SELECT f.id, f.ai_voorstel, e.onderwerp, f.omschrijving FROM inkoopfacturen f
      LEFT JOIN email_berichten e ON e.id = f.email_bericht_id WHERE f.status = 'te_beoordelen'`,
