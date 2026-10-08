@@ -11,11 +11,11 @@ import { AI_MODELLEN, aiBeschikbaar, aiKostenMaand } from "../../integrations/ai
 import { koppelStatus, ontkoppel, outlookIngesteld, startKoppelen } from "../../integrations/outlook/index.ts";
 import { mollieIngesteld } from "../../integrations/mollie/index.ts";
 import { berekenAangifte, heropenPeriode, RUBRIEK_OMSCHRIJVING, sluitPeriode, zorgVoorPeriode } from "../../modules/btw/service.ts";
-import { factuurLijst } from "../../modules/facturen/service.ts";
+import { factuurLijst, zetHandmatigBetaald } from "../../modules/facturen/service.ts";
 import { categorieen } from "../../modules/relaties/service.ts";
 import { dashboardCijfers, doorbelastingPerKlant, exportAccountant, winstEnVerlies } from "../../modules/rapportages/service.ts";
 import { ontbrekendeFacturen } from "../../modules/bank/service.ts";
-import { bedrag, geheel, idParam, klaar, render, tekst } from "../render.ts";
+import { bedrag, geheel, idParam, klaar, lijst, render, tekst } from "../render.ts";
 import type { Diensten } from "../diensten.ts";
 import { koppelingenRoutes, koppelingInfo } from "./koppelingen.ts";
 import { koppelDoorbelastingen } from "../../modules/facturen/leverancier-uit-factuur.ts";
@@ -113,16 +113,43 @@ export function rapportagesRouter(ctx: Ctx): Router {
     const van = kw ? `${jaar}-${String((kw - 1) * 3 + 1).padStart(2, "0")}-01` : `${jaar}-01-01`;
     const tot = kw ? berekenAangifte(ctx.db, jaar, kw).tot : `${jaar}-12-31`;
     const nu = vandaag();
+    // Openstaande posten: standaard alleen facturen uit de gekozen periode; met ?alle=1 alles tot het einde van de periode
+    const alle = req.query.alle === "1";
+    const filter = { status: "geboekt", betaalstatus: "onbetaald" as const, limiet: 1000, van: alle ? undefined : van, tot };
     render(ctx, req, res, "rapportages", {
       titel: "Rapportages",
       jaar,
       kw,
+      van,
+      tot,
+      alle,
       wv: winstEnVerlies(ctx, van, tot),
       doorbelasting: doorbelastingPerKlant(ctx, van, tot),
-      debiteuren: factuurLijst(ctx, "verkoop", { status: "geboekt", betaalstatus: "onbetaald", limiet: 1000 }),
-      crediteuren: factuurLijst(ctx, "inkoop", { status: "geboekt", betaalstatus: "onbetaald", limiet: 1000 }),
+      debiteuren: factuurLijst(ctx, "verkoop", filter),
+      crediteuren: factuurLijst(ctx, "inkoop", filter),
+      ouderOpen: ctx.db.get<{ n: number }>(
+        `SELECT (SELECT COUNT(*) FROM inkoopfacturen WHERE status = 'geboekt' AND betaald_handmatig_op IS NULL AND factuurdatum < ?) AS n`,
+        [van],
+      )!.n,
       vandaag: nu,
     });
+  });
+
+  /** Meerdere facturen tegelijk als betaald markeren (bv. van vóór de eerste bankimport, of betaald via incasso). */
+  r.post("/markeer-betaald", (req, res) => {
+    const soort = req.body.soort === "verkoop" ? "verkoop" : "inkoop";
+    const ids = lijst<string>(req.body.ids).map(Number).filter((n) => Number.isInteger(n) && n > 0);
+    if (!ids.length) throw new GebruikersFout("Selecteer eerst één of meer facturen");
+    let n = 0;
+    for (const id of ids) {
+      const f = ctx.db.get<{ factuurdatum: string | null; vervaldatum: string | null }>(`SELECT factuurdatum, vervaldatum FROM ${soort}facturen WHERE id = ?`, [id]);
+      if (!f) continue;
+      // Betaaldatum: vervaldatum (incasso/termijn), anders factuurdatum
+      zetHandmatigBetaald(ctx, soort, id, f.vervaldatum ?? f.factuurdatum ?? vandaag(), req.sessie!.gebruikersnaam!);
+      n++;
+    }
+    const terug = typeof req.body.terug === "string" && req.body.terug.startsWith("/rapportages") ? req.body.terug : "/rapportages";
+    klaar(ctx, req, res, terug, `${n} factuur/facturen als ${soort === "inkoop" ? "betaald" : "ontvangen"} gemarkeerd.`);
   });
 
   r.get("/export/:jaar", async (req, res) => {

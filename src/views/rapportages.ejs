@@ -56,19 +56,31 @@
 <p class="hulp">“Gefactureerd” is het totaal van alle verkoopfacturen aan deze klant in de periode (ook voor andere diensten). Een negatief verschil betekent dat je meer inkoopt dan je doorbelast. Kies “Heel jaar” om jaarlijkse facturen tegenover maandelijkse inkoop te zien.</p>
 <% } %>
 
-<h2 id="debiteuren">Nog te ontvangen</h2>
-<div class="tabel-wrap"><table>
-  <thead><tr><th>Factuur</th><th>Klant</th><th>Datum</th><th>Vervaldatum</th><th class="bedrag">Open</th></tr></thead>
-  <tbody><% if (!debiteuren.length) { %><tr><td colspan="5" class="zacht">Niets openstaand.</td></tr><% } %>
-  <% debiteuren.forEach(f => { %><tr><td><a href="/verkoop/<%= f.id %>"><%= f.factuurnummer || '#' + f.id %></a></td><td><%= f.relatie_naam || '' %></td><td><%= nlDatum(f.factuurdatum) %></td><td class="<%= f.vervaldatum && f.vervaldatum < vandaag ? 'negatief' : '' %>"><%= nlDatum(f.vervaldatum) %></td><td class="bedrag"><%= euro(f.openstaand) %></td></tr><% }) %></tbody>
-  <tfoot><tr><td colspan="4">Totaal</td><td class="bedrag"><%= euro(debiteuren.reduce((s, f) => s + f.openstaand, 0)) %></td></tr></tfoot>
-</table></div>
+<% const periodeTekst = kw ? 'Q' + kw + ' ' + jaar : String(jaar); %>
+<% const terugUrl = '/rapportages?jaar=' + jaar + (kw ? '&kwartaal=' + kw : '') + (alle ? '&alle=1' : ''); %>
+<div class="acties">
+  <% if (alle) { %>
+    <span>Openstaande posten: <strong>alles t/m <%= nlDatum(tot) %></strong>.</span> <a class="knop klein" href="/rapportages?jaar=<%= jaar %><%= kw ? '&kwartaal=' + kw : '' %>">Alleen <%= periodeTekst %></a>
+  <% } else { %>
+    <span>Openstaande posten: <strong>facturen uit <%= periodeTekst %></strong>.</span> <a class="knop klein" href="/rapportages?jaar=<%= jaar %><%= kw ? '&kwartaal=' + kw : '' %>&alle=1">Ook eerdere perioden</a>
+    <% if (ouderOpen) { %><span class="hulp"><%= ouderOpen %> inkoopfactuur/-facturen van vóór deze periode staan nog open.</span><% } %>
+  <% } %>
+</div>
 
-<h2 id="crediteuren">Nog te betalen</h2>
-<div class="tabel-wrap"><table>
-  <thead><tr><th>Factuur</th><th>Leverancier</th><th>Datum</th><th>Vervaldatum</th><th class="bedrag">Open</th></tr></thead>
-  <tbody><% if (!crediteuren.length) { %><tr><td colspan="5" class="zacht">Niets openstaand.</td></tr><% } %>
-  <% crediteuren.forEach(f => { %><tr><td><a href="/inkoop/<%= f.id %>"><%= f.factuurnummer || '#' + f.id %></a></td><td><%= f.relatie_naam || '' %></td><td><%= nlDatum(f.factuurdatum) %></td><td class="<%= f.vervaldatum && f.vervaldatum < vandaag ? 'negatief' : '' %>"><%= nlDatum(f.vervaldatum) %></td><td class="bedrag"><%= euro(f.openstaand) %></td></tr><% }) %></tbody>
-  <tfoot><tr><td colspan="4">Totaal</td><td class="bedrag"><%= euro(crediteuren.reduce((s, f) => s + f.openstaand, 0)) %></td></tr></tfoot>
-</table></div>
+<% const openLijst = (id, kop, soort, rijen, relKop) => { %>
+<h2 id="<%= id %>"><%= kop %></h2>
+<form method="post" action="/rapportages/markeer-betaald" data-bevestig="Geselecteerde facturen markeren als <%= soort === 'inkoop' ? 'betaald' : 'ontvangen' %> (op de vervaldatum, of anders de factuurdatum)?">
+  <%- include('partials/csrf') %><input type="hidden" name="soort" value="<%= soort %>"><input type="hidden" name="terug" value="<%= terugUrl %>">
+  <div class="tabel-wrap"><table class="klikbaar">
+    <thead><tr><th><input type="checkbox" data-alles-selecteren title="Alles selecteren"></th><th>Factuur</th><th><%= relKop %></th><th>Datum</th><th>Vervaldatum</th><th class="bedrag">Open</th></tr></thead>
+    <tbody><% if (!rijen.length) { %><tr><td colspan="6" class="zacht">Niets openstaand.</td></tr><% } %>
+    <% rijen.forEach(f => { %><tr data-href="/<%= soort %>/<%= f.id %>"><td><input type="checkbox" name="ids[]" value="<%= f.id %>"></td><td><a href="/<%= soort %>/<%= f.id %>"><%= f.factuurnummer || '#' + f.id %></a></td><td><%= f.relatie_naam || '' %></td><td><%= nlDatum(f.factuurdatum) %></td><td class="<%= f.vervaldatum && f.vervaldatum < vandaag ? 'negatief' : '' %>"><%= nlDatum(f.vervaldatum) %></td><td class="bedrag"><%= euro(f.openstaand) %></td></tr><% }) %></tbody>
+    <tfoot><tr><td colspan="5">Totaal</td><td class="bedrag"><%= euro(rijen.reduce((s, f) => s + f.openstaand, 0)) %></td></tr></tfoot>
+  </table></div>
+  <% if (rijen.length) { %><div class="acties"><button class="klein" type="submit">Geselecteerde markeren als <%= soort === 'inkoop' ? 'betaald' : 'ontvangen' %></button>
+    <span class="hulp">Voor facturen die al betaald zijn maar (nog) niet aan een banktransactie gekoppeld, bv. van vóór je eerste N26-import of via incasso.</span></div><% } %>
+</form>
+<% } %>
+<% openLijst('debiteuren', 'Nog te ontvangen', 'verkoop', debiteuren, 'Klant') %>
+<% openLijst('crediteuren', 'Nog te betalen', 'inkoop', crediteuren, 'Leverancier') %>
 <%- include('partials/voet') %>
