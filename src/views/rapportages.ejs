@@ -46,10 +46,15 @@
       <% const m = k.verkocht > 0 ? (k.verkocht - k.ingekocht) / k.verkocht * 100 : null; %>
       <td class="bedrag"><span class="label-status <%= m === null || m < margeMin ? 'fout' : 'ok' %>"><%= m === null ? '–' : m.toFixed(0) + '%' %></span></td>
       <% const per = (r) => r.periode_van ? ' · periode ' + nlDatum(r.periode_van) + ' t/m ' + nlDatum(r.periode_tot) : ''; const deel = (r) => r.aandeel < 0.999 ? ' (' + Math.round(r.aandeel * 100) + '% van ' + euro(r.bedrag_excl) + ')' : ''; %>
-      <td><details><summary class="klein"><%= k.regels.length %> inkoopregel(s), <%= k.verkoop.length %> verkoopregel(s)</summary>
+      <% const perLev = {}; k.regels.forEach(r => { const n = r.leverancier || 'Onbekende leverancier'; (perLev[n] = perLev[n] || []).push(r); }); const levs = Object.keys(perLev); %>
+      <td><details><summary class="klein"><%= k.regels.length %> inkoopregel(s) van <%= levs.length %> leverancier(s), <%= k.verkoop.length %> verkoopregel(s)</summary>
         <ul class="klein">
-          <% k.regels.forEach(r => { %><li>Inkoop <a href="/inkoop/<%= r.factuur_id %>"><%= r.factuurnummer || '#' + r.factuur_id %></a> <%= r.leverancier ? '(' + r.leverancier + ')' : '' %>: <%= r.omschrijving || '' %><%= per(r) %> – <%= euro(r.deel) %><%= deel(r) %></li><% }) %>
-          <% k.verkoop.forEach(r => { %><li>Verkoop <a href="/verkoop/<%= r.factuur_id %>"><%= r.factuurnummer || '#' + r.factuur_id %></a> <%= nlDatum(r.factuurdatum) %>: <%= r.omschrijving || '' %><%= per(r) %> – <%= euro(r.deel) %><%= deel(r) %></li><% }) %>
+          <% levs.forEach(n => { const rs = perLev[n]; %>
+            <li><strong>Inkoop bij <%= n %></strong> – <%= euro(rs.reduce((t, r) => t + r.deel, 0)) %>
+              <ul><% rs.forEach(r => { %><li><a href="/inkoop/<%= r.factuur_id %>"><%= r.factuurnummer || '#' + r.factuur_id %></a>: <%= r.omschrijving || '' %><%= per(r) %> – <%= euro(r.deel) %><%= deel(r) %></li><% }) %></ul></li>
+          <% }) %>
+          <li><strong>Verkoop</strong> – <%= euro(k.verkocht) %></li>
+          <% k.verkoop.forEach(r => { %><li class="mt-klein">↳ <a href="/verkoop/<%= r.factuur_id %>"><%= r.factuurnummer || '#' + r.factuur_id %></a> <%= nlDatum(r.factuurdatum) %>: <%= r.omschrijving || '' %><%= per(r) %> – <%= euro(r.deel) %><%= deel(r) %></li><% }) %>
         </ul></details></td>
     </tr>
   <% }) %>

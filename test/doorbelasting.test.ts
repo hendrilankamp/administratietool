@@ -153,3 +153,26 @@ test("marge-alarm: onder 20% (ook met jaarfactuur naar rato) en zonder verkoop",
     ctx.opruimen();
   }
 });
+
+test("verkoop aan klant tegenover inkoop van meerdere leveranciers", async () => {
+  const ctx = await testCtx();
+  try {
+    const klant = slaRelatieOp(ctx, null, { naam: "Florano", type: "klant" }, "t");
+    const sw = categorieId(ctx, "Software & abonnementen");
+    let n = 0;
+    for (const [lev, bedrag] of [["DSA", 1000], ["Vimexx", 500], ["Domeinen BV", 250]] as const) {
+      const l = slaRelatieOp(ctx, null, { naam: lev, type: "leverancier" }, "t");
+      const id = nieuweInkoopfactuur(ctx, "handmatig", { gebruiker: "t" });
+      werkFactuurBij(ctx, "inkoop", id, { relatie_id: l, factuurnummer: `I${n++}`, factuurdatum: "2026-05-01", regels: [{ categorie_id: sw, bedrag_excl: bedrag, btw_code: "NL21", doorbelast_relatie_id: klant }] }, { gebruiker: "t", boeken: true });
+    }
+    const v = nieuweVerkoopfactuur(ctx, "t");
+    werkFactuurBij(ctx, "verkoop", v, { relatie_id: klant, factuurnummer: "V1", factuurdatum: "2026-05-10", regels: [{ categorie_id: categorieId(ctx, "Omzet"), bedrag_excl: 2500, btw_code: "NL21" }] }, { gebruiker: "t", boeken: true });
+    const k = doorbelastingPerKlant(ctx, "2026-04-01", "2026-06-30").klanten[0];
+    assert.equal(k.ingekocht, 1750);
+    assert.equal(new Set(k.regels.map((r) => r.leverancier)).size, 3);
+    assert.equal(k.verkocht, 2500);
+    assert.equal(k.verschil, 750); // 30% marge
+  } finally {
+    ctx.opruimen();
+  }
+});
