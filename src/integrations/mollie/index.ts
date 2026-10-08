@@ -201,6 +201,11 @@ export async function syncVerkoopfacturen(ctx: Ctx, facturen?: MollieSalesInvoic
   const lijst = facturen ?? (await alles<MollieSalesInvoice>(ctx, "/sales-invoices?limit=100"));
   const omzet = categorieen(ctx).find((c) => c.soort === "omzet")?.id ?? null;
   const res: MollieSyncResultaat = { nieuw: 0, bijgewerkt: 0, overgeslagen: 0, fouten: 0, waarschuwingen: [] };
+  // Opruimen: geannuleerde/verlopen Mollie-facturen die nooit geboekt zijn horen niet in de administratie
+  ctx.db.run(
+    `DELETE FROM verkoopfacturen WHERE bron = 'mollie' AND status = 'vervallen' AND geboekt_op IS NULL
+       AND NOT EXISTS (SELECT 1 FROM transactie_koppelingen k WHERE k.verkoopfactuur_id = verkoopfacturen.id)`,
+  );
 
   // Eén afwijkende factuur mag de rest niet tegenhouden
   const verwerkEen = async (inv: MollieSalesInvoice): Promise<void> => {
@@ -209,7 +214,9 @@ export async function syncVerkoopfacturen(ctx: Ctx, facturen?: MollieSalesInvoic
       "SELECT id, status, factuurdatum, totaal_incl, bijlage_sha256, mollie_status FROM verkoopfacturen WHERE mollie_id = ?",
       [inv.id],
     );
-    if (!status) {
+    if (!status || (status === "vervallen" && (!bestaand || bestaand.status !== "geboekt"))) {
+      // Concept, of geannuleerd/verlopen zonder dat hij ooit geboekt was: niet (meer) importeren
+      if (bestaand && bestaand.status !== "geboekt" && status === "vervallen") ctx.db.run("DELETE FROM verkoopfacturen WHERE id = ?", [bestaand.id]);
       res.overgeslagen++;
       return;
     }

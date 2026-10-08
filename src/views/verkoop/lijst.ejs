@@ -11,6 +11,7 @@
 <form method="get" class="rij">
   <div><label>Zoeken</label><input name="zoek" value="<%= query.zoek || '' %>" placeholder="Klant, factuurnummer…"></div>
   <div class="smal"><label>Betaling</label><select name="betaal"><option value="">Alle</option><option value="onbetaald" <%= query.betaal === 'onbetaald' ? 'selected' : '' %>>Nog te ontvangen</option><option value="betaald" <%= query.betaal === 'betaald' ? 'selected' : '' %>>Betaald</option></select></div>
+  <% if (aantalGeannuleerd) { %><div class="smal"><label><input type="checkbox" name="geannuleerd" value="1" <%= query.geannuleerd === '1' ? 'checked' : '' %>> Toon geannuleerde (<%= aantalGeannuleerd %>)</label></div><% } %>
   <div class="smal"><button type="submit">Filter</button></div>
 </form>
 <div class="tabel-wrap mt1">

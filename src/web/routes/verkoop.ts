@@ -17,7 +17,10 @@ export function verkoopRouter(ctx: Ctx, diensten: Diensten): Router {
     const betaal = ["onbetaald", "betaald"].includes(String(req.query.betaal)) ? (req.query.betaal as "onbetaald" | "betaald") : undefined;
     render(ctx, req, res, "verkoop/lijst", {
       titel: "Verkoopfacturen",
-      facturen: factuurLijst(ctx, "verkoop", { zoek: tekst(req.query.zoek, 100) ?? undefined, betaalstatus: betaal }),
+      facturen: factuurLijst(ctx, "verkoop", { zoek: tekst(req.query.zoek, 100) ?? undefined, betaalstatus: betaal }).filter(
+        (f) => req.query.geannuleerd === "1" || f.status !== "vervallen",
+      ),
+      aantalGeannuleerd: ctx.db.get<{ n: number }>("SELECT COUNT(*) AS n FROM verkoopfacturen WHERE status = 'vervallen'")!.n,
       mollie: mollieIngesteld(ctx),
     });
   });

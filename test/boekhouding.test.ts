@@ -214,3 +214,27 @@ test("Mollie: paginagrootte maximaal 100 en alle pagina's worden opgehaald", asy
     ctx.opruimen();
   }
 });
+
+test("Mollie: geannuleerde/verlopen facturen niet importeren; eerder geboekte blijven als geannuleerd", async () => {
+  const ctx = await testCtx();
+  try {
+    const nooitGeboekt = { ...mollieFactuur, id: "invoice_weg", invoiceNumber: "2026-0100", status: "cancelled" };
+    const verlopen = { ...mollieFactuur, id: "invoice_verlopen", invoiceNumber: "2026-0101", status: "expired" };
+    let res = await syncVerkoopfacturen(ctx, [nooitGeboekt, verlopen]);
+    assert.equal(res.nieuw, 0);
+    assert.equal(ctx.db.get<{ n: number }>("SELECT COUNT(*) AS n FROM verkoopfacturen")!.n, 0);
+
+    // Eerst uitgegeven (geboekt), daarna geannuleerd: blijft bewaard als 'vervallen'
+    await syncVerkoopfacturen(ctx, [{ ...mollieFactuur, status: "issued" }]);
+    res = await syncVerkoopfacturen(ctx, [{ ...mollieFactuur, status: "cancelled" }]);
+    assert.equal(ctx.db.get<{ status: string }>("SELECT status FROM verkoopfacturen WHERE mollie_id = 'invoice_abc'")!.status, "vervallen");
+
+    // Oud geïmporteerd 'vervallen' zonder ooit geboekt te zijn: wordt opgeruimd
+    ctx.db.run("INSERT INTO verkoopfacturen (factuurnummer, status, bron, mollie_id) VALUES ('oud', 'vervallen', 'mollie', 'invoice_oud')");
+    await syncVerkoopfacturen(ctx, []);
+    assert.equal(ctx.db.get("SELECT id FROM verkoopfacturen WHERE mollie_id = 'invoice_oud'"), undefined);
+    assert.ok(ctx.db.get("SELECT id FROM verkoopfacturen WHERE mollie_id = 'invoice_abc'"));
+  } finally {
+    ctx.opruimen();
+  }
+});
