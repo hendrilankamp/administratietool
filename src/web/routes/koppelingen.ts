@@ -7,6 +7,7 @@ import { controleerWachtwoord } from "../../lib/crypto.ts";
 import { bronVan, INSTELBAAR, slaInstellingenOp, type InstelSleutel, type Wijziging } from "../../lib/instellingen.ts";
 import { klaar, render, tekst } from "../render.ts";
 import { ruimEigenFacturenOp } from "../../modules/facturen/eigen.ts";
+import { mollieUitleg } from "../../integrations/mollie/index.ts";
 
 /** Overzicht van alle koppel-instellingen voor de view (geheimen worden nooit teruggestuurd). */
 export function koppelingInfo(ctx: Ctx) {
@@ -87,9 +88,18 @@ export function koppelingenRoutes(ctx: Ctx, r: Router): void {
     const kop = { Authorization: `Bearer ${ctx.config.MOLLIE_TOKEN}` };
     const qs = ctx.config.MOLLIE_TESTMODE ? "&testmode=true" : "";
     const f = await fetch(`https://api.mollie.com/v2/sales-invoices?limit=1${qs}`, { headers: kop, signal: AbortSignal.timeout(20_000) });
-    if (!f.ok) throw new GebruikersFout(`Mollie-facturen: geen toegang (${f.status}). Controleer het token en het recht sales-invoices.read.`);
-    const s = await fetch(`https://api.mollie.com/v2/settlements?limit=1${qs}`, { headers: kop, signal: AbortSignal.timeout(20_000) });
-    klaar(ctx, req, res, "/instellingen#mollie", s.ok ? "Mollie werkt: facturen én uitbetalingen zijn bereikbaar." : `Facturen werken, maar uitbetalingen niet (${s.status}): gebruik een Organization access token met settlements.read.`);
+    if (!f.ok) throw new GebruikersFout(`Mollie-facturen: geen toegang (${f.status}): ${await mollieUitleg(f)}`);
+    const s = await fetch("https://api.mollie.com/v2/settlements?limit=1", { headers: kop, signal: AbortSignal.timeout(20_000) });
+    const soort = ctx.config.MOLLIE_TOKEN.startsWith("access_") ? "Organization access token" : ctx.config.MOLLIE_TOKEN.startsWith("test_") ? "test-API-key" : "API-key";
+    klaar(
+      ctx,
+      req,
+      res,
+      "/instellingen#mollie",
+      s.ok
+        ? `Mollie werkt (${soort}): facturen én uitbetalingen zijn bereikbaar.`
+        : `Facturen werken, maar uitbetalingen niet (${s.status}, ${soort}): ${await mollieUitleg(s)}`,
+    );
   });
 
   r.post("/test/ai", async (req, res) => {

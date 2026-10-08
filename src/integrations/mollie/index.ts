@@ -53,7 +53,8 @@ export function mollieIngesteld(ctx: Ctx): boolean {
 
 async function mollie<T>(ctx: Ctx, pad: string, poging = 0): Promise<T> {
   const url = new URL(pad.startsWith("http") ? pad : `${API}${pad}`);
-  if (ctx.config.MOLLIE_TESTMODE && !url.searchParams.has("testmode")) url.searchParams.set("testmode", "true");
+  // testmode=true alleen waar Mollie dat ondersteunt (niet bij uitbetalingen)
+  if (ctx.config.MOLLIE_TESTMODE && !url.searchParams.has("testmode") && !url.pathname.startsWith("/v2/settlements")) url.searchParams.set("testmode", "true");
   if (url.origin !== "https://api.mollie.com") throw new Error("Onverwachte Mollie-URL");
   const res = await fetch(url, { headers: { Authorization: `Bearer ${ctx.config.MOLLIE_TOKEN}` }, signal: AbortSignal.timeout(60_000) });
   if ((res.status === 429 || res.status >= 500) && poging < 4) {
@@ -61,10 +62,22 @@ async function mollie<T>(ctx: Ctx, pad: string, poging = 0): Promise<T> {
     return mollie<T>(ctx, pad, poging + 1);
   }
   if (res.status === 401 || res.status === 403) {
-    throw new GebruikersFout(`Mollie weigert toegang (${res.status}) voor ${url.pathname}. Controleer het token en de rechten (sales-invoices.read, settlements.read).`, 502);
+    throw new GebruikersFout(`Mollie weigert toegang (${res.status}) voor ${url.pathname}: ${await mollieUitleg(res)}`, 502);
   }
   if (!res.ok) throw new Error(`Mollie ${res.status}: ${(await res.text()).slice(0, 300)}`);
   return (await res.json()) as T;
+}
+
+/** De uitleg die Mollie zelf bij een fout meestuurt (veld "detail"), of een algemene hint. */
+export async function mollieUitleg(res: Response): Promise<string> {
+  try {
+    const body = (await res.json()) as { detail?: string; title?: string };
+    if (body.detail) return `${body.detail}${res.status === 403 ? " (controleer of het token het recht voor dit onderdeel heeft en bij het juiste profiel/de juiste organisatie hoort)" : ""}`;
+    if (body.title) return body.title;
+  } catch {
+    // geen JSON
+  }
+  return "controleer het token en de rechten (sales-invoices.read, settlements.read).";
 }
 
 /** Haalt alle items van een gepagineerde Mollie-lijst op. */
