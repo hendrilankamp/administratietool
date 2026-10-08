@@ -2,6 +2,18 @@
 <% const mollie = f.bron === 'mollie'; const geboekt = f.status === 'geboekt'; %>
 <div class="acties mb0"><a href="/verkoop">← Verkoopfacturen</a></div>
 <h1>Verkoopfactuur <%= f.factuurnummer || ('#' + f.id) %> <%- include('../partials/betaalstatus', { f }) %></h1>
+<% if (f.is_creditnota) { %>
+  <div class="melding info"><strong>Creditnota</strong><% if (creditVoor) { %> – verrekend met factuur <a href="/verkoop/<%= creditVoor.id %>"><%= creditVoor.factuurnummer || '#' + creditVoor.id %></a>; beide staan niet meer open.<% } else { %>.
+    <% if (verrekenOpties.length) { %>
+      <form method="post" action="/verkoop/<%= f.id %>/verreken" class="rij mt1"><%- include('../partials/csrf') %>
+        <div><select name="factuur_id" required><option value="">Verrekenen met factuur…</option><% verrekenOpties.forEach(o => { %><option value="<%= o.id %>"><%= o.factuurnummer || '#' + o.id %> – <%= nlDatum(o.factuurdatum) %> – <%= euro(o.totaal_incl) %></option><% }) %></select></div>
+        <div class="smal"><button class="klein" type="submit">Verrekenen</button></div>
+      </form>
+    <% } %>
+  <% } %></div>
+<% } %>
+<% if (f.lokaal_geannuleerd) { %><div class="melding let">Door jou als <strong>geannuleerd</strong> gemarkeerd: telt niet mee voor omzet en BTW.
+  <form method="post" action="/verkoop/<%= f.id %>/lokaal-annuleren" class="inline"><%- include('../partials/csrf') %><input type="hidden" name="ongedaan" value="1"><button class="klein" type="submit">Ongedaan maken</button></form></div><% } %>
 <% if (mollie) { %><div class="melding info">Deze factuur komt uit Mollie (status: <strong><%= f.mollie_status %></strong><%= f.mollie_betaald_op ? ', betaald op ' + nlDatum(f.mollie_betaald_op) : '' %>). Wijzig de factuur in Mollie; hier kun je alleen de categorieën aanpassen.</div><% } %>
 
 <div class="split">
@@ -68,6 +80,7 @@
         <% } %>
       <% } %>
     </div>
+    <% if (mollie && geboekt) { %><form method="post" action="/verkoop/<%= f.id %>/lokaal-annuleren" data-bevestig="Deze factuur is in Mollie geannuleerd of verwijderd? Hij telt dan niet meer mee voor omzet en BTW, en de synchronisatie zet hem niet terug."><%- include('../partials/csrf') %><button class="gevaar" type="submit">Geannuleerd in Mollie</button></form><% } %>
     <% if (!geboekt && !mollie) { %><form method="post" action="/verkoop/<%= f.id %>/verwijderen" data-bevestig="Concept verwijderen?"><%- include('../partials/csrf') %><button class="gevaar" type="submit">Concept verwijderen</button></form><% } %>
   </div>
   <div class="voorbeeld">

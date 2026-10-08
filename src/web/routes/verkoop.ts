@@ -1,7 +1,8 @@
 import { Router } from "express";
 import type { Ctx } from "../../lib/context.ts";
-import { GebruikersFout } from "../../lib/context.ts";
-import { mollieIngesteld } from "../../integrations/mollie/index.ts";
+import { mollieIngesteld, verrekenCreditnota } from "../../integrations/mollie/index.ts";
+import { audit, GebruikersFout } from "../../lib/context.ts";
+import { eisOpenPeriode } from "../../modules/btw/service.ts";
 import { btwCodes } from "../../modules/btw/service.ts";
 import { factuurLijst, haalFactuur, nieuweVerkoopfactuur, verwijderFactuur, werkFactuurBij, zetHandmatigBetaald, zetRegelCategorieen, zetRegelPerioden } from "../../modules/facturen/service.ts";
 import { haalTransactie } from "../../modules/bank/service.ts";
@@ -48,6 +49,13 @@ export function verkoopRouter(ctx: Ctx, diensten: Diensten): Router {
       koppelingen,
       relatie: f.relatie_id ? haalRelatie(ctx, f.relatie_id) : null,
       klanten: relaties(ctx, { type: "klant" }),
+      verrekenOpties: f.is_creditnota && !f.creditnota_voor && f.relatie_id
+        ? ctx.db.all<{ id: number; factuurnummer: string | null; totaal_incl: number; factuurdatum: string | null }>(
+            "SELECT id, factuurnummer, totaal_incl, factuurdatum FROM verkoopfacturen WHERE relatie_id = ? AND is_creditnota = 0 AND status = 'geboekt' AND id <> ? ORDER BY factuurdatum DESC LIMIT 50",
+            [f.relatie_id, f.id],
+          )
+        : [],
+      creditVoor: f.creditnota_voor ? ctx.db.get<{ id: number; factuurnummer: string | null }>("SELECT id, factuurnummer FROM verkoopfacturen WHERE id = ?", [f.creditnota_voor]) : null,
       categorieen: categorieen(ctx).filter((c) => c.soort !== "kosten"),
       btwCodes: btwCodes(ctx.db).filter((c) => c.soort !== "inkoop"),
     });
@@ -88,6 +96,28 @@ export function verkoopRouter(ctx: Ctx, diensten: Diensten): Router {
       { gebruiker: gebruiker(req), boeken: b.actie === "boeken" },
     );
     klaar(ctx, req, res, `/verkoop/${id}`, b.actie === "boeken" ? "Factuur geboekt." : "Opgeslagen.");
+  });
+
+  /** Mollie-factuur die je in Mollie hebt geannuleerd/verwijderd maar die Mollie nog als uitgegeven meldt. */
+  r.post("/:id/lokaal-annuleren", (req, res) => {
+    const id = idParam(req.params.id);
+    const f = haalFactuur(ctx, "verkoop", id);
+    if (!f) throw new GebruikersFout("Factuur niet gevonden", 404);
+    eisOpenPeriode(ctx.db, f.factuurdatum);
+    if (ctx.db.get("SELECT 1 FROM transactie_koppelingen WHERE verkoopfactuur_id = ?", [id])) throw new GebruikersFout("Ontkoppel eerst de banktransactie");
+    const terug = req.body.ongedaan === "1";
+    ctx.db.run("UPDATE verkoopfacturen SET status = ?, lokaal_geannuleerd = ?, gewijzigd_op = ? WHERE id = ?", [terug ? "geboekt" : "vervallen", terug ? 0 : 1, new Date().toISOString(), id]);
+    audit(ctx.db, gebruiker(req), terug ? "annulering_ongedaan" : "lokaal_geannuleerd", "verkoopfacturen", id);
+    klaar(ctx, req, res, `/verkoop/${id}`, terug ? "Factuur weer actief." : "Factuur als geannuleerd gemarkeerd; telt niet meer mee voor omzet en BTW. Mollie-synchronisatie zet hem niet terug.");
+  });
+
+  /** Creditnota verrekenen met de oorspronkelijke factuur (beide afgehandeld). */
+  r.post("/:id/verreken", (req, res) => {
+    const id = idParam(req.params.id);
+    const origineel = idParam(req.body.factuur_id);
+    const doel = verrekenCreditnota(ctx, id, origineel, gebruiker(req));
+    if (!doel) throw new GebruikersFout("Verrekenen niet gelukt (alleen geboekte creditnota's)");
+    klaar(ctx, req, res, `/verkoop/${id}`, "Creditnota verrekend met de factuur; beide staan niet meer open.");
   });
 
   r.post("/:id/betaald", (req, res) => {

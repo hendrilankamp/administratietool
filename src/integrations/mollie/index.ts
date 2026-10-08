@@ -110,6 +110,41 @@ export function mollieBtwCode(vatRate: string, land: string | null | undefined, 
   return "NL21"; // OSS-tarieven van andere lidstaten: handmatig controleren
 }
 
+/** Creditnota: Mollie-nummer begint met "C-" (bv. C-2026-0002) of het totaal is negatief. */
+export function isMollieCreditnota(inv: MollieSalesInvoice): boolean {
+  return /^C[-_\s]?\d/i.test(inv.invoiceNumber ?? "") || centen(inv.totalAmount) < 0;
+}
+
+/**
+ * Verrekent een creditnota met de oorspronkelijke factuur: als er precies één openstaande factuur aan dezelfde klant
+ * met hetzelfde (tegengestelde) bedrag is, worden beide als afgehandeld gemarkeerd.
+ */
+export function verrekenCreditnota(ctx: Ctx, creditId: number, origineelId?: number, gebruiker = "mollie"): number | null {
+  const c = ctx.db.get<{ id: number; relatie_id: number | null; totaal_incl: number; factuurdatum: string | null; creditnota_voor: number | null; status: string }>(
+    "SELECT id, relatie_id, totaal_incl, factuurdatum, creditnota_voor, status FROM verkoopfacturen WHERE id = ?",
+    [creditId],
+  );
+  if (!c || c.status !== "geboekt") return null;
+  let doel = origineelId ?? c.creditnota_voor ?? null;
+  if (!doel && c.relatie_id) {
+    const kandidaten = ctx.db.all<{ id: number }>(
+      `SELECT id FROM verkoopfacturen WHERE relatie_id = ? AND id <> ? AND is_creditnota = 0 AND status = 'geboekt' AND totaal_incl = ?
+         AND betaald_handmatig_op IS NULL AND COALESCE(mollie_status, '') <> 'paid'
+         AND NOT EXISTS (SELECT 1 FROM transactie_koppelingen k WHERE k.verkoopfactuur_id = verkoopfacturen.id)`,
+      [c.relatie_id, c.id, -c.totaal_incl],
+    );
+    if (kandidaten.length === 1) doel = kandidaten[0].id;
+  }
+  if (!doel) return null;
+  const datum = c.factuurdatum ?? new Date().toISOString().slice(0, 10);
+  ctx.db.tx(() => {
+    ctx.db.run("UPDATE verkoopfacturen SET creditnota_voor = ?, betaald_handmatig_op = COALESCE(betaald_handmatig_op, ?) WHERE id = ?", [doel, datum, c.id]);
+    ctx.db.run("UPDATE verkoopfacturen SET betaald_handmatig_op = COALESCE(betaald_handmatig_op, ?) WHERE id = ?", [datum, doel]);
+    audit(ctx.db, gebruiker, "creditnota_verrekend", "verkoopfacturen", c.id, { factuur: doel });
+  });
+  return doel;
+}
+
 /** Zet een Mollie-factuur om naar regels met BTW-codes; sluit exact aan op de totalen van Mollie. */
 export function vertaalMollieFactuur(ctx: Ctx, inv: MollieSalesInvoice, omzetCategorieId: number | null) {
   const codes = btwCodeMap(ctx.db);
@@ -152,6 +187,13 @@ export function vertaalMollieFactuur(ctx: Ctx, inv: MollieSalesInvoice, omzetCat
   if (regels.length && inv.totalVatAmount && doelBtw !== somBtw) {
     const i = regels.findIndex((r) => !codes.get(r.btw_code)?.verlegd && codes.get(r.btw_code)!.tarief_bp > 0);
     if (i >= 0) regels[i].btw_bedrag += doelBtw - somBtw;
+  }
+  // Mollie levert creditnota's met positieve bedragen: in de boekhouding zijn ze negatief
+  if (isMollieCreditnota(inv) && regels.reduce((s, r) => s + r.bedrag_excl + r.btw_bedrag, 0) > 0) {
+    for (const r of regels) {
+      r.bedrag_excl = -r.bedrag_excl;
+      r.btw_bedrag = -r.btw_bedrag;
+    }
   }
   return regels;
 }
@@ -223,10 +265,17 @@ export async function syncVerkoopfacturen(ctx: Ctx, facturen?: MollieSalesInvoic
   // Eén afwijkende factuur mag de rest niet tegenhouden
   const verwerkEen = async (inv: MollieSalesInvoice): Promise<void> => {
     const status = statusVoorMollie(inv.status);
-    const bestaand = ctx.db.get<{ id: number; status: string; factuurdatum: string | null; totaal_incl: number; bijlage_sha256: string | null; mollie_status: string }>(
-      "SELECT id, status, factuurdatum, totaal_incl, bijlage_sha256, mollie_status FROM verkoopfacturen WHERE mollie_id = ?",
+    const bestaand = ctx.db.get<{ id: number; status: string; factuurdatum: string | null; totaal_incl: number; bijlage_sha256: string | null; mollie_status: string; lokaal_geannuleerd: number }>(
+      "SELECT id, status, factuurdatum, totaal_incl, bijlage_sha256, mollie_status, lokaal_geannuleerd FROM verkoopfacturen WHERE mollie_id = ?",
       [inv.id],
     );
+    if (bestaand?.lokaal_geannuleerd) {
+      // Door jou als geannuleerd gemarkeerd: niet terugzetten, alleen de Mollie-status bijhouden
+      ctx.db.run("UPDATE verkoopfacturen SET mollie_status = ? WHERE id = ?", [inv.status, bestaand.id]);
+      res.overgeslagen++;
+      return;
+    }
+    const credit = isMollieCreditnota(inv) ? 1 : 0;
     if (!status || (status === "vervallen" && (!bestaand || bestaand.status !== "geboekt"))) {
       // Concept, of geannuleerd/verlopen zonder dat hij ooit geboekt was: niet (meer) importeren
       if (bestaand && bestaand.status !== "geboekt" && status === "vervallen") ctx.db.run("DELETE FROM verkoopfacturen WHERE id = ?", [bestaand.id]);
@@ -251,16 +300,20 @@ export async function syncVerkoopfacturen(ctx: Ctx, facturen?: MollieSalesInvoic
       ctx.db.tx(() => {
         ctx.db.run(
           `UPDATE verkoopfacturen SET factuurnummer = ?, factuurdatum = ?, vervaldatum = ?, omschrijving = ?, totaal_excl = ?, totaal_btw = ?, totaal_incl = ?,
-             status = ?, mollie_status = ?, mollie_betaald_op = ?, mollie_betaalreferenties = ?, bijlage_sha256 = ?, gewijzigd_op = ? WHERE id = ?`,
-          [inv.invoiceNumber ?? null, factuurdatum, datumDeel(inv.dueAt), inv.memo?.slice(0, 1000) ?? null, excl, btw, excl + btw, status, inv.status, datumDeel(inv.paidAt), referenties, pdf, new Date().toISOString(), bestaand.id],
+             status = ?, mollie_status = ?, mollie_betaald_op = ?, mollie_betaalreferenties = ?, bijlage_sha256 = ?, is_creditnota = ?, gewijzigd_op = ? WHERE id = ?`,
+          [inv.invoiceNumber ?? null, factuurdatum, datumDeel(inv.dueAt), inv.memo?.slice(0, 1000) ?? null, excl, btw, excl + btw, status, inv.status, datumDeel(inv.paidAt), referenties, pdf, credit, new Date().toISOString(), bestaand.id],
         );
         if (bedragGewijzigd) {
           // Categorieën per regel behouden waar mogelijk
-          const oudeCats = ctx.db.all<{ categorie_id: number | null }>("SELECT categorie_id FROM verkoopfactuur_regels WHERE factuur_id = ? ORDER BY volgorde", [bestaand.id]);
+          // Categorieën en perioden per regel behouden waar mogelijk
+          const oud = ctx.db.all<{ categorie_id: number | null; periode_van: string | null; periode_tot: string | null }>(
+            "SELECT categorie_id, periode_van, periode_tot FROM verkoopfactuur_regels WHERE factuur_id = ? ORDER BY volgorde",
+            [bestaand.id],
+          );
           ctx.db.run("DELETE FROM verkoopfactuur_regels WHERE factuur_id = ?", [bestaand.id]);
           regels.forEach((r, i) =>
-            ctx.db.run("INSERT INTO verkoopfactuur_regels (factuur_id, volgorde, omschrijving, categorie_id, bedrag_excl, btw_code, btw_bedrag) VALUES (?, ?, ?, ?, ?, ?, ?)", [
-              bestaand.id, i, r.omschrijving, oudeCats[i]?.categorie_id ?? r.categorie_id, r.bedrag_excl, r.btw_code, r.btw_bedrag,
+            ctx.db.run("INSERT INTO verkoopfactuur_regels (factuur_id, volgorde, omschrijving, categorie_id, bedrag_excl, btw_code, btw_bedrag, periode_van, periode_tot) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", [
+              bestaand.id, i, r.omschrijving, oud[i]?.categorie_id ?? r.categorie_id, r.bedrag_excl, r.btw_code, r.btw_bedrag, oud[i]?.periode_van ?? null, oud[i]?.periode_tot ?? null,
             ]),
           );
         }
@@ -269,6 +322,7 @@ export async function syncVerkoopfacturen(ctx: Ctx, facturen?: MollieSalesInvoic
           res.bijgewerkt++;
         }
       });
+      if (credit) verrekenCreditnota(ctx, bestaand.id);
       return;
     }
 
@@ -295,13 +349,14 @@ export async function syncVerkoopfacturen(ctx: Ctx, facturen?: MollieSalesInvoic
       res.waarschuwingen.push(`Mollie-factuur ${inv.invoiceNumber ?? inv.id} (${factuurdatum}) valt in een afgesloten periode en is als concept geïmporteerd.`);
     }
     const effectief = status === "geboekt" && isAfgesloten(ctx.db, factuurdatum) ? "concept" : status;
+    let nieuwId = 0;
     ctx.db.tx(() => {
       const id = ctx.db.run(
         `INSERT INTO verkoopfacturen (relatie_id, factuurnummer, factuurdatum, vervaldatum, omschrijving, totaal_excl, totaal_btw, totaal_incl, status, bron,
-           mollie_id, mollie_status, mollie_betaald_op, mollie_betaalreferenties, bijlage_sha256, geboekt_op)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'mollie', ?, ?, ?, ?, ?, ?)`,
+           mollie_id, mollie_status, mollie_betaald_op, mollie_betaalreferenties, bijlage_sha256, geboekt_op, is_creditnota)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'mollie', ?, ?, ?, ?, ?, ?, ?)`,
         [relatieId, inv.invoiceNumber ?? null, factuurdatum, datumDeel(inv.dueAt), inv.memo?.slice(0, 1000) ?? null, excl, btw, excl + btw, effectief,
-          inv.id, inv.status, datumDeel(inv.paidAt), referenties, pdf, effectief === "geboekt" ? new Date().toISOString() : null],
+          inv.id, inv.status, datumDeel(inv.paidAt), referenties, pdf, effectief === "geboekt" ? new Date().toISOString() : null, credit],
       ).id;
       regels.forEach((r, i) =>
         ctx.db.run("INSERT INTO verkoopfactuur_regels (factuur_id, volgorde, omschrijving, categorie_id, bedrag_excl, btw_code, btw_bedrag) VALUES (?, ?, ?, ?, ?, ?, ?)", [
@@ -309,7 +364,9 @@ export async function syncVerkoopfacturen(ctx: Ctx, facturen?: MollieSalesInvoic
         ]),
       );
       audit(ctx.db, "mollie", "geimporteerd", "verkoopfacturen", id, { mollie_id: inv.id, status: inv.status });
+      nieuwId = id;
     });
+    if (credit && nieuwId) verrekenCreditnota(ctx, nieuwId);
     res.nieuw++;
   };
   for (const inv of lijst) {

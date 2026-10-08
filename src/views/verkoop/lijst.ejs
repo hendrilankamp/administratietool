@@ -30,7 +30,7 @@
       <td class="nowrap"><%= nlDatum(f.factuurdatum) %></td>
       <td><a href="/verkoop/<%= f.id %>"><%= f.factuurnummer || ('#' + f.id) %></a></td>
       <td><%= f.relatie_naam || '—' %></td>
-      <td><%= f.bron === 'mollie' ? 'Mollie' : 'handmatig' %><% if (f.mollie_status) { %> <span class="hulp">(<%= f.mollie_status %>)</span><% } %></td>
+      <td><%= f.bron === 'mollie' ? 'Mollie' : 'handmatig' %><%= f.is_creditnota ? ' · creditnota' : '' %><% if (f.mollie_status) { %> <span class="hulp">(<%= f.mollie_status %>)</span><% } %></td>
       <td class="bedrag"><%= euro(f.totaal_excl) %></td>
       <td class="bedrag"><%= euro(f.totaal_incl) %></td>
       <td class="bedrag"><%= f.status === 'geboekt' && f.betaalstatus !== 'betaald' ? euro(f.openstaand) : '' %></td>

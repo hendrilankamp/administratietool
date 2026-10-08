@@ -238,3 +238,43 @@ test("Mollie: geannuleerde/verlopen facturen niet importeren; eerder geboekte bl
     ctx.opruimen();
   }
 });
+
+test("Mollie-creditnota (C-...): negatief geboekt en verrekend met de oorspronkelijke factuur", async () => {
+  const ctx = await testCtx();
+  try {
+    const quickly = { ...mollieFactuur, recipient: { type: "business" as const, organizationName: "Quickly Services", email: "fin@quickly.nl", country: "NL" },
+      lines: [{ description: "Diensten", quantity: 1, vatRate: "21.00", unitPrice: { currency: "EUR", value: "490.00" } }],
+      subtotalAmount: { currency: "EUR", value: "490.00" }, totalVatAmount: { currency: "EUR", value: "102.90" }, totalAmount: { currency: "EUR", value: "592.90" }, paymentDetails: [] };
+    await syncVerkoopfacturen(ctx, [{ ...quickly, id: "inv_0040", invoiceNumber: "I-2026-0040", status: "issued", issuedAt: "2026-08-28T10:00:00Z", paidAt: null }]);
+    await syncVerkoopfacturen(ctx, [{ ...quickly, id: "inv_c2", invoiceNumber: "C-2026-0002", status: "issued", issuedAt: "2026-10-08T10:00:00Z", paidAt: null }]);
+    const c = ctx.db.get<{ id: number; totaal_incl: number; is_creditnota: number; creditnota_voor: number }>("SELECT * FROM verkoopfacturen WHERE factuurnummer = 'C-2026-0002'")!;
+    const i = ctx.db.get<{ id: number }>("SELECT id FROM verkoopfacturen WHERE factuurnummer = 'I-2026-0040'")!;
+    assert.equal(c.totaal_incl, -59290);
+    assert.equal(c.is_creditnota, 1);
+    assert.equal(c.creditnota_voor, i.id);
+    assert.equal(haalFactuur(ctx, "verkoop", i.id)!.betaalstatus, "betaald");
+    assert.equal(haalFactuur(ctx, "verkoop", c.id)!.betaalstatus, "betaald");
+    // BTW-aangifte Q3 + Q4 samen: per saldo nul
+    const q3 = berekenAangifte(ctx.db, 2026, 3).regels.find((r) => r.rubriek === "1a")!;
+    const q4 = berekenAangifte(ctx.db, 2026, 4).regels.find((r) => r.rubriek === "1a")!;
+    assert.equal(q3.grondslag + q4.grondslag, 0);
+    // Opnieuw synchroniseren verandert niets
+    const r = await syncVerkoopfacturen(ctx, [{ ...quickly, id: "inv_c2", invoiceNumber: "C-2026-0002", status: "issued", issuedAt: "2026-10-08T10:00:00Z", paidAt: null }]);
+    assert.equal(r.bijgewerkt, 0);
+  } finally {
+    ctx.opruimen();
+  }
+});
+
+test("lokaal geannuleerde Mollie-factuur wordt niet teruggezet door synchronisatie", async () => {
+  const ctx = await testCtx();
+  try {
+    await syncVerkoopfacturen(ctx, [{ ...mollieFactuur, status: "issued", paidAt: null }]);
+    const id = ctx.db.get<{ id: number }>("SELECT id FROM verkoopfacturen WHERE mollie_id = 'invoice_abc'")!.id;
+    ctx.db.run("UPDATE verkoopfacturen SET status = 'vervallen', lokaal_geannuleerd = 1 WHERE id = ?", [id]);
+    await syncVerkoopfacturen(ctx, [{ ...mollieFactuur, status: "issued", paidAt: null }]);
+    assert.equal(ctx.db.get<{ status: string }>("SELECT status FROM verkoopfacturen WHERE id = ?", [id])!.status, "vervallen");
+  } finally {
+    ctx.opruimen();
+  }
+});

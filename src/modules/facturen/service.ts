@@ -65,6 +65,9 @@ export interface Factuur {
   mollie_id?: string | null;
   mollie_status?: string | null;
   mollie_betaald_op?: string | null;
+  is_creditnota?: number;
+  creditnota_voor?: number | null;
+  lokaal_geannuleerd?: number;
   // afgeleid
   betaald_bank: number;
   openstaand: number;
