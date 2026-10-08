@@ -13,7 +13,7 @@ import { mollieIngesteld } from "../../integrations/mollie/index.ts";
 import { berekenAangifte, heropenPeriode, RUBRIEK_OMSCHRIJVING, sluitPeriode, zorgVoorPeriode } from "../../modules/btw/service.ts";
 import { factuurLijst, zetHandmatigBetaald } from "../../modules/facturen/service.ts";
 import { categorieen } from "../../modules/relaties/service.ts";
-import { dashboardCijfers, doorbelastingPerKlant, exportAccountant, winstEnVerlies } from "../../modules/rapportages/service.ts";
+import { dashboardCijfers, doorbelastingPerKlant, exportAccountant, margeAlarmen, winstEnVerlies } from "../../modules/rapportages/service.ts";
 import { ontbrekendeFacturen } from "../../modules/bank/service.ts";
 import { bedrag, geheel, idParam, klaar, lijst, render, tekst } from "../render.ts";
 import type { Diensten } from "../diensten.ts";
@@ -23,6 +23,7 @@ import { koppelDoorbelastingen } from "../../modules/facturen/leverancier-uit-fa
 export function dashboardRouter(ctx: Ctx): Router {
   const r = Router();
   r.get("/", async (req, res) => {
+    koppelDoorbelastingen(ctx);
     const nu = vandaag();
     const { jaar, kwartaal } = kwartaalVan(nu);
     const laatsteBackup = lijstBackups(ctx.config.backupDir)[0] ?? null;
@@ -36,6 +37,7 @@ export function dashboardRouter(ctx: Ctx): Router {
       outlook: outlookIngesteld(ctx) ? await koppelStatus(ctx) : null,
       ontbrekend: ontbrekendeFacturen(ctx, 0, 3).length,
       herstel: herstelKlaargezet(ctx.config),
+      marge: margeAlarmen(ctx),
       externUit: !!ctx.config.BACKUP_EXTERN_DIR && !(ctx.config.AGE_PASSPHRASE || ctx.config.AGE_RECIPIENT),
       nogInTeStellen: [
         !ctx.config.MOLLIE_TOKEN && "Mollie",
@@ -125,6 +127,7 @@ export function rapportagesRouter(ctx: Ctx): Router {
       alle,
       wv: winstEnVerlies(ctx, van, tot),
       doorbelasting: doorbelastingPerKlant(ctx, van, tot),
+      margeMin: ctx.config.MARGE_MIN,
       debiteuren: factuurLijst(ctx, "verkoop", filter),
       crediteuren: factuurLijst(ctx, "inkoop", filter),
       ouderOpen: ctx.db.get<{ n: number }>(
@@ -148,7 +151,7 @@ export function rapportagesRouter(ctx: Ctx): Router {
       zetHandmatigBetaald(ctx, soort, id, f.vervaldatum ?? f.factuurdatum ?? vandaag(), req.sessie!.gebruikersnaam!);
       n++;
     }
-    const terug = typeof req.body.terug === "string" && req.body.terug.startsWith("/rapportages") ? req.body.terug : "/rapportages";
+    const terug = typeof req.body.terug === "string" && /^\/(rapportages|inkoop|verkoop)([?#/]|$)/.test(req.body.terug) ? req.body.terug : "/rapportages";
     klaar(ctx, req, res, terug, `${n} factuur/facturen als ${soort === "inkoop" ? "betaald" : "ontvangen"} gemarkeerd.`);
   });
 

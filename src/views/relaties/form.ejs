@@ -31,7 +31,10 @@
     <div><label>Standaard BTW-code</label>
       <select name="standaard_btw_code"><option value="">–</option><% btwCodes.forEach(c => { %><option value="<%= c.code %>" <%= r.standaard_btw_code === c.code ? 'selected' : '' %>><%= c.omschrijving %></option><% }) %></select></div>
   </div>
-  <div class="veld mt1"><label>Notities</label><textarea name="notities" rows="2"><%= r.notities || '' %></textarea></div>
+  <div class="rij mt1">
+    <div><label>Andere namen (één per regel, bv. oude handelsnaam of websitenaam)</label><textarea name="aliassen" rows="2" placeholder="Akupaneldeal&#10;akupaneldeal.nl"><%= r.aliassen || '' %></textarea></div>
+    <div><label>Notities</label><textarea name="notities" rows="2"><%= r.notities || '' %></textarea></div>
+  </div>
   <p class="hulp">IBAN en naam worden gebruikt om banktransacties automatisch aan facturen te koppelen; het BTW-nummer om AI-voorstellen aan deze leverancier te koppelen.</p>
   <button class="primair" type="submit">Opslaan</button>
 </form>

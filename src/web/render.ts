@@ -2,7 +2,7 @@ import type { Request, Response } from "express";
 import type { Ctx } from "../lib/context.ts";
 import { GebruikersFout } from "../lib/context.ts";
 import { euro, formatBedrag, invoerBedrag, parseBedrag } from "../lib/geld.ts";
-import { isGeldigeDatum, nlDatum, nlTijdstip } from "../lib/datum.ts";
+import { isGeldigeDatum, maandGrenzen, nlDatum, nlTijdstip } from "../lib/datum.ts";
 import { pakFlash, zetFlash } from "./sessie.ts";
 
 export const helpers = { euro, formatBedrag, invoerBedrag, nlDatum, nlTijdstip };
@@ -75,6 +75,18 @@ export function lijst<T = Record<string, unknown>>(v: unknown): T[] {
   return [];
 }
 
+/** Periode uit twee maandvelden ("2026-01" t/m "2026-12") of datums. */
+export function periodeUitFormulier(van: unknown, tot: unknown): { periode_van: string | null; periode_tot: string | null } {
+  const v = tekst(van, 10);
+  const t = tekst(tot, 10);
+  const begin = v ? (v.length === 7 ? maandGrenzen(v)?.van : isGeldigeDatum(v) ? v : null) : null;
+  const eind = t ? (t.length === 7 ? maandGrenzen(t)?.tot : isGeldigeDatum(t) ? t : null) : null;
+  if ((v && !begin) || (t && !eind)) throw new GebruikersFout("Ongeldige periode");
+  // Alleen een beginmaand: die ene maand
+  if (begin && !eind && v?.length === 7) return { periode_van: begin, periode_tot: maandGrenzen(v)!.tot };
+  return { periode_van: begin ?? null, periode_tot: eind ?? null };
+}
+
 /** Factuurregels uit een formulier (bedragen als tekst in euro's). Lege regels worden overgeslagen. */
 export function regelsUitFormulier(v: unknown) {
   return lijst<Record<string, string>>(v)
@@ -91,6 +103,7 @@ export function regelsUitFormulier(v: unknown) {
         bedrag_excl: excl,
         btw_code: tekst(r.btw_code, 30) ?? "NL21",
         btw_bedrag: btw,
+        ...periodeUitFormulier(r.periode_van, r.periode_tot),
         doorbelast_relatie_id: geheel(r.doorbelast_relatie_id),
         doorbelast_naam: tekst(r.doorbelast_naam, 200),
         periode: tekst(r.periode, 100),

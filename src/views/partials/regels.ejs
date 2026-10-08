@@ -4,7 +4,13 @@
 <% const regelRij = (r) => { %>
   <tr>
     <td class="col-omschr"><input data-naam="omschrijving" value="<%= r.omschrijving || '' %>" <%= bewerkbaar ? '' : 'disabled' %>>
-      <% if (doorbelasten) { %><input class="klein mt-klein" data-naam="periode" value="<%= r.periode || '' %>" placeholder="periode (optioneel)" <%= bewerkbaar ? '' : 'disabled' %>><% } %></td>
+      <div class="periode-invoer" title="Periode waarop deze regel betrekking heeft (bv. jaarabonnement). Wordt in rapportages naar rato verdeeld. Leeg = factuurdatum.">
+        <span class="hulp">periode</span>
+        <input type="month" data-naam="periode_van" value="<%= r.periode_van ? r.periode_van.slice(0, 7) : '' %>" <%= bewerkbaar ? '' : 'disabled' %>>
+        <span class="hulp">t/m</span>
+        <input type="month" data-naam="periode_tot" value="<%= r.periode_tot ? r.periode_tot.slice(0, 7) : '' %>" <%= bewerkbaar ? '' : 'disabled' %>>
+      </div>
+      <% if (doorbelasten) { %><input type="hidden" data-naam="periode" value="<%= r.periode || '' %>"><% } %></td>
     <% if (doorbelasten) { %>
     <td class="col-klant">
       <select data-naam="doorbelast_relatie_id" <%= bewerkbaar ? '' : 'disabled' %>>

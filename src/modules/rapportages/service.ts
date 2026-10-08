@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Ctx } from "../../lib/context.ts";
 import { naarCsv } from "../../lib/csv.ts";
+import { overlapFractie } from "../../lib/datum.ts";
 import { bijlageBestandsnaamOpSchijf } from "../../lib/bijlagen.ts";
 import { ZipSchrijver } from "../../backup/zip.ts";
 import { berekenAangifte } from "../btw/service.ts";
@@ -194,40 +195,59 @@ export async function exportAccountant(ctx: Ctx, jaar: number): Promise<string> 
 export interface DoorbelastingKlant {
   relatie_id: number;
   naam: string;
-  ingekocht: number; // excl. BTW, centen
-  verkocht: number; // excl. BTW, centen
+  ingekocht: number; // excl. BTW, centen (naar rato over de periode)
+  verkocht: number; // excl. BTW, centen (naar rato over de periode)
   verschil: number; // verkocht - ingekocht
-  regels: { factuur_id: number; factuurnummer: string | null; leverancier: string | null; factuurdatum: string | null; omschrijving: string | null; periode: string | null; bedrag_excl: number }[];
-  verkoopfacturen: { id: number; factuurnummer: string | null; factuurdatum: string | null; totaal_excl: number }[];
+  regels: { factuur_id: number; factuurnummer: string | null; leverancier: string | null; factuurdatum: string | null; omschrijving: string | null; periode_van: string | null; periode_tot: string | null; bedrag_excl: number; aandeel: number; deel: number }[];
+  verkoop: { factuur_id: number; factuurnummer: string | null; factuurdatum: string | null; omschrijving: string | null; periode_van: string | null; periode_tot: string | null; bedrag_excl: number; aandeel: number; deel: number }[];
 }
 
+/** Deel van een regel dat in [van, tot] valt: naar rato van de regelperiode, anders op factuurdatum. */
+function aandeel(van: string, tot: string, r: { periode_van: string | null; periode_tot: string | null; factuurdatum: string | null }): number {
+  if (r.periode_van && r.periode_tot) return overlapFractie(van, tot, r.periode_van, r.periode_tot);
+  return r.factuurdatum && r.factuurdatum >= van && r.factuurdatum <= tot ? 1 : 0;
+}
+
+/** Regels met een periode die [van, tot] overlapt, of zonder periode met factuurdatum in [van, tot]. */
+const OVERLAP = "((r.periode_van IS NOT NULL AND r.periode_van <= ? AND r.periode_tot >= ?) OR (r.periode_van IS NULL AND f.factuurdatum BETWEEN ? AND ?))";
+
 /**
- * Doorbelasting per klant: wat er voor een klant is ingekocht (inkoopregels met "doorbelasten aan")
- * tegenover wat er aan die klant is gefactureerd, in dezelfde periode.
+ * Doorbelasting per klant: wat er voor een klant is ingekocht (inkoopregels met "doorbelasten aan") tegenover wat er
+ * aan die klant is gefactureerd. Regels met een periode (bv. een jaarfactuur) worden naar rato over die periode verdeeld,
+ * zodat een jaarlijkse verkoopfactuur eerlijk tegenover maandelijkse inkoop staat.
  */
 export function doorbelastingPerKlant(ctx: Ctx, van: string, tot: string): { klanten: DoorbelastingKlant[]; nietToegewezen: { naam: string; bedrag: number; aantal: number }[] } {
-  const regels = ctx.db.all<DoorbelastingKlant["regels"][number] & { relatie_id: number; klant: string }>(
+  const p = [tot, van, van, tot];
+  const inkoop = ctx.db.all<Omit<DoorbelastingKlant["regels"][number], "aandeel" | "deel"> & { relatie_id: number; klant: string }>(
     `SELECT r.doorbelast_relatie_id AS relatie_id, k.naam AS klant, f.id AS factuur_id, f.factuurnummer, l.naam AS leverancier, f.factuurdatum,
-            r.omschrijving, r.periode, r.bedrag_excl
+            r.omschrijving, r.periode_van, r.periode_tot, r.bedrag_excl
      FROM inkoopfactuur_regels r JOIN inkoopfacturen f ON f.id = r.factuur_id
      JOIN relaties k ON k.id = r.doorbelast_relatie_id LEFT JOIN relaties l ON l.id = f.relatie_id
-     WHERE f.status = 'geboekt' AND f.factuurdatum BETWEEN ? AND ?
+     WHERE f.status = 'geboekt' AND ${OVERLAP}
      ORDER BY k.naam, f.factuurdatum`,
-    [van, tot],
+    p,
   );
   const perKlant = new Map<number, DoorbelastingKlant>();
-  for (const r of regels) {
-    const k = perKlant.get(r.relatie_id) ?? { relatie_id: r.relatie_id, naam: r.klant, ingekocht: 0, verkocht: 0, verschil: 0, regels: [], verkoopfacturen: [] };
-    k.ingekocht += r.bedrag_excl;
-    k.regels.push(r);
+  for (const r of inkoop) {
+    const k = perKlant.get(r.relatie_id) ?? { relatie_id: r.relatie_id, naam: r.klant, ingekocht: 0, verkocht: 0, verschil: 0, regels: [], verkoop: [] };
+    const a = aandeel(van, tot, r);
+    const deel = Math.round(r.bedrag_excl * a);
+    k.ingekocht += deel;
+    k.regels.push({ ...r, aandeel: a, deel });
     perKlant.set(r.relatie_id, k);
   }
   for (const k of perKlant.values()) {
-    k.verkoopfacturen = ctx.db.all(
-      "SELECT id, factuurnummer, factuurdatum, totaal_excl FROM verkoopfacturen WHERE relatie_id = ? AND status = 'geboekt' AND factuurdatum BETWEEN ? AND ? ORDER BY factuurdatum",
-      [k.relatie_id, van, tot],
+    const verkoop = ctx.db.all<Omit<DoorbelastingKlant["verkoop"][number], "aandeel" | "deel">>(
+      `SELECT f.id AS factuur_id, f.factuurnummer, f.factuurdatum, r.omschrijving, r.periode_van, r.periode_tot, r.bedrag_excl
+       FROM verkoopfactuur_regels r JOIN verkoopfacturen f ON f.id = r.factuur_id
+       WHERE f.relatie_id = ? AND f.status = 'geboekt' AND ${OVERLAP} ORDER BY f.factuurdatum, r.volgorde`,
+      [k.relatie_id, ...p],
     );
-    k.verkocht = k.verkoopfacturen.reduce((s, f) => s + f.totaal_excl, 0);
+    k.verkoop = verkoop.map((r) => {
+      const a = aandeel(van, tot, r);
+      return { ...r, aandeel: a, deel: Math.round(r.bedrag_excl * a) };
+    });
+    k.verkocht = k.verkoop.reduce((s, r) => s + r.deel, 0);
     k.verschil = k.verkocht - k.ingekocht;
   }
   const nietToegewezen = ctx.db.all<{ naam: string; bedrag: number; aantal: number }>(
@@ -238,4 +258,32 @@ export function doorbelastingPerKlant(ctx: Ctx, van: string, tot: string): { kla
     [van, tot],
   );
   return { klanten: [...perKlant.values()].sort((a, b) => a.verschil - b.verschil), nietToegewezen };
+}
+
+export interface MargeAlarm {
+  relatie_id: number;
+  naam: string;
+  ingekocht: number;
+  verkocht: number;
+  marge: number | null; // percentage; null = geen verkoop
+}
+
+/**
+ * Marge-alarm: klanten waarbij de doorbelaste inkoop tegenover de verkoop minder dan MARGE_MIN % marge oplevert,
+ * gemeten over de laatste MARGE_MAANDEN volledige maanden. Door de verdeling naar rato staat een jaarfactuur
+ * eerlijk tegenover maandelijkse inkoop; regels hoeven niet één-op-één overeen te komen (totaal per klant).
+ */
+export function margeAlarmen(ctx: Ctx, nu: Date = new Date()): { van: string; tot: string; minimum: number; alarmen: MargeAlarm[] } {
+  const maanden = ctx.config.MARGE_MAANDEN;
+  const eindeVorigeMaand = new Date(Date.UTC(nu.getFullYear(), nu.getMonth(), 0));
+  const begin = new Date(Date.UTC(nu.getFullYear(), nu.getMonth() - maanden, 1));
+  const van = begin.toISOString().slice(0, 10);
+  const tot = eindeVorigeMaand.toISOString().slice(0, 10);
+  const minimum = ctx.config.MARGE_MIN;
+  const alarmen = doorbelastingPerKlant(ctx, van, tot)
+    .klanten.filter((k) => k.ingekocht > 0)
+    .map((k) => ({ relatie_id: k.relatie_id, naam: k.naam, ingekocht: k.ingekocht, verkocht: k.verkocht, marge: k.verkocht > 0 ? ((k.verkocht - k.ingekocht) / k.verkocht) * 100 : null }))
+    .filter((k) => k.marge === null || k.marge < minimum)
+    .sort((a, b) => (a.marge ?? -Infinity) - (b.marge ?? -Infinity));
+  return { van, tot, minimum, alarmen };
 }

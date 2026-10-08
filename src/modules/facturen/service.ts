@@ -23,6 +23,9 @@ export const regelSchema = z.object({
   doorbelast_relatie_id: z.number().int().positive().nullable().optional(),
   doorbelast_naam: z.string().trim().max(200).nullable().optional(),
   periode: z.string().trim().max(100).nullable().optional(),
+  // Periode waarop de regel betrekking heeft (bv. jaarabonnement), voor verdeling naar rato
+  periode_van: datum.nullable().optional(),
+  periode_tot: datum.nullable().optional(),
 });
 export type RegelInvoer = z.infer<typeof regelSchema>;
 
@@ -80,6 +83,8 @@ export interface Regel {
   doorbelast_relatie_id?: number | null;
   doorbelast_naam?: string | null;
   periode?: string | null;
+  periode_van?: string | null;
+  periode_tot?: string | null;
 }
 
 function betaalstatus(f: Omit<Factuur, "openstaand" | "betaalstatus">): Pick<Factuur, "openstaand" | "betaalstatus"> {
@@ -161,6 +166,8 @@ export function verwerkRegels(ctx: Ctx, soort: Soort, regels: RegelInvoer[]) {
     const code = codes.get(r.btw_code);
     if (!code) throw new GebruikersFout(`Onbekende BTW-code op regel ${i + 1}: ${r.btw_code}`);
     if (code.soort !== "beide" && code.soort !== soort) throw new GebruikersFout(`BTW-code ${code.code} is niet bruikbaar voor ${soort}`);
+    if (r.periode_van && r.periode_tot && r.periode_tot < r.periode_van) throw new GebruikersFout(`Periode op regel ${i + 1}: einde ligt vóór begin`);
+    if (!!r.periode_van !== !!r.periode_tot) throw new GebruikersFout(`Periode op regel ${i + 1}: vul zowel begin als einde in`);
     const b = regelBtw(code, r.bedrag_excl, r.btw_bedrag);
     excl += r.bedrag_excl;
     btw += b;
@@ -233,11 +240,11 @@ export function werkFactuurBij(ctx: Ctx, soort: Soort, id: number, invoer: Factu
     for (const r of v.regels) {
       ctx.db.run(
         soort === "inkoop"
-          ? `INSERT INTO inkoopfactuur_regels (factuur_id, volgorde, omschrijving, categorie_id, bedrag_excl, btw_code, btw_bedrag, doorbelast_relatie_id, doorbelast_naam, periode) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-          : `INSERT INTO verkoopfactuur_regels (factuur_id, volgorde, omschrijving, categorie_id, bedrag_excl, btw_code, btw_bedrag) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          ? `INSERT INTO inkoopfactuur_regels (factuur_id, volgorde, omschrijving, categorie_id, bedrag_excl, btw_code, btw_bedrag, doorbelast_relatie_id, doorbelast_naam, periode, periode_van, periode_tot) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          : `INSERT INTO verkoopfactuur_regels (factuur_id, volgorde, omschrijving, categorie_id, bedrag_excl, btw_code, btw_bedrag, periode_van, periode_tot) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         soort === "inkoop"
-          ? [id, r.volgorde, r.omschrijving ?? null, r.categorie_id ?? null, r.bedrag_excl, r.btw_code, r.btw_bedrag, r.doorbelast_relatie_id ?? null, r.doorbelast_naam ?? null, r.periode ?? null]
-          : [id, r.volgorde, r.omschrijving ?? null, r.categorie_id ?? null, r.bedrag_excl, r.btw_code, r.btw_bedrag],
+          ? [id, r.volgorde, r.omschrijving ?? null, r.categorie_id ?? null, r.bedrag_excl, r.btw_code, r.btw_bedrag, r.doorbelast_relatie_id ?? null, r.doorbelast_naam ?? null, r.periode ?? null, r.periode_van ?? null, r.periode_tot ?? null]
+          : [id, r.volgorde, r.omschrijving ?? null, r.categorie_id ?? null, r.bedrag_excl, r.btw_code, r.btw_bedrag, r.periode_van ?? null, r.periode_tot ?? null],
       );
     }
     audit(ctx.db, opties.gebruiker, opties.boeken && huidig.status !== "geboekt" ? "geboekt" : "gewijzigd", t.factuur, id, {
@@ -289,6 +296,21 @@ export function zetHandmatigBetaald(ctx: Ctx, soort: Soort, id: number, datum: s
   ]);
   if (r.changes === 0) throw new GebruikersFout("Factuur niet gevonden", 404);
   audit(ctx.db, gebruiker, datum ? "handmatig_betaald" : "handmatig_betaald_ongedaan", TABEL[soort].factuur, id, { datum });
+}
+
+/** Periode van regels wijzigen zonder bedragen aan te raken (ook bij Mollie-facturen; heeft geen invloed op de BTW). */
+export function zetRegelPerioden(ctx: Ctx, soort: Soort, factuurId: number, perioden: Record<number, { van: string | null; tot: string | null }>, gebruiker: string): void {
+  const f = haalFactuur(ctx, soort, factuurId);
+  if (!f) throw new GebruikersFout("Factuur niet gevonden", 404);
+  ctx.db.tx(() => {
+    for (const r of f.regels) {
+      const p = perioden[r.id];
+      if (!p) continue;
+      if (!!p.van !== !!p.tot || (p.van && p.tot && p.tot < p.van)) throw new GebruikersFout(`Ongeldige periode op regel "${r.omschrijving ?? r.id}"`);
+      ctx.db.run(`UPDATE ${TABEL[soort].regels} SET periode_van = ?, periode_tot = ? WHERE id = ? AND factuur_id = ?`, [p.van, p.tot, r.id, factuurId]);
+    }
+    audit(ctx.db, gebruiker, "perioden_gewijzigd", TABEL[soort].factuur, factuurId, perioden);
+  });
 }
 
 /** Alleen de categorie van regels wijzigen (bv. bij Mollie-facturen). */

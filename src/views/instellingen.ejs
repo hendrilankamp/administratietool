@@ -37,6 +37,17 @@
   </form>
 </div>
 
+<div class="paneel" id="marge">
+  <h2 class="mb0">Marge-alarm doorbelasting</h2>
+  <p class="hulp">Het dashboard waarschuwt als de doorbelaste inkoop voor een klant (bv. licenties) tegenover wat je die klant factureert minder marge oplevert dan het minimum. Gemeten over de laatste volledige maanden, met jaarfacturen naar rato verdeeld.</p>
+  <form method="post" action="/instellingen/koppelingen" class="rij">
+    <%- include('partials/csrf') %><input type="hidden" name="sectie" value="marge">
+    <div class="smal"><label>Minimale marge (%)</label><input name="MARGE_MIN" inputmode="decimal" value="<%= k.MARGE_MIN.waarde %>"></div>
+    <div class="smal"><label>Over de laatste … maanden</label><input type="number" name="MARGE_MAANDEN" min="1" max="36" value="<%= k.MARGE_MAANDEN.waarde %>"></div>
+    <div class="smal"><button class="primair" type="submit">Opslaan</button></div>
+  </form>
+</div>
+
 <div class="paneel" id="ai">
   <h2 class="mb0">AI-uitlezen (Claude) <% if (k.ANTHROPIC_API_KEY.ingesteld) { %><span class="label-status ok">ingesteld</span><% } %></h2>
   <p class="hulp">https://console.anthropic.com → API Keys. De PDF van een inkoopfactuur wordt daarvoor naar Anthropic gestuurd. Zonder sleutel vul je facturen zelf in. Stel in de Anthropic Console (Settings → Limits) ook een harde maandlimiet in als extra vangnet.</p>

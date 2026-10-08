@@ -61,9 +61,94 @@ test("DSA-factuur: regels per klant, BTW sluit aan op 4,80, doorbelasting-rappor
     assert.equal(per["Lunieq"].ingekocht, 1069);
     assert.equal(per["Lunieq"].verkocht, 1500);
     assert.equal(per["Lunieq"].verschil, 431);
-    assert.equal(per["Florano"].verkoopfacturen.length, 0);
+    assert.equal(per["Florano"].verkoop.length, 0);
     assert.equal(per["Akupaneldeal"].relatie_id, aku);
     assert.equal(rap.nietToegewezen.length, 0);
+  } finally {
+    ctx.opruimen();
+  }
+});
+
+test("jaarlijkse verkoopfactuur tegenover maandelijkse inkoop wordt naar rato verdeeld", async () => {
+  const ctx = await testCtx();
+  try {
+    const klant = slaRelatieOp(ctx, null, { naam: "Florano", type: "klant" }, "t");
+    const lev = slaRelatieOp(ctx, null, { naam: "DSA", type: "leverancier" }, "t");
+    const sw = categorieId(ctx, "Software & abonnementen");
+    // 12 maanden inkoop van € 10 (factuur begin volgende maand, periode = vorige maand)
+    for (let m = 1; m <= 12; m++) {
+      const mm = String(m).padStart(2, "0");
+      const laatste = new Date(Date.UTC(2026, m, 0)).getUTCDate();
+      const id = nieuweInkoopfactuur(ctx, "handmatig", { gebruiker: "t" });
+      const fd = m === 12 ? "2026-12-31" : `2026-${String(m + 1).padStart(2, "0")}-02`;
+      werkFactuurBij(ctx, "inkoop", id, { relatie_id: lev, factuurnummer: `I${m}`, factuurdatum: fd, regels: [{ categorie_id: sw, bedrag_excl: 1000, btw_code: "NL21", doorbelast_relatie_id: klant, periode_van: `2026-${mm}-01`, periode_tot: `2026-${mm}-${laatste}` }] }, { gebruiker: "t", boeken: true });
+    }
+    // Eén jaarfactuur in januari van € 180 voor heel 2026
+    const v = nieuweVerkoopfactuur(ctx, "t");
+    werkFactuurBij(ctx, "verkoop", v, { relatie_id: klant, factuurnummer: "JAAR-2026", factuurdatum: "2026-01-10", regels: [{ categorie_id: categorieId(ctx, "Omzet"), bedrag_excl: 18000, btw_code: "NL21", periode_van: "2026-01-01", periode_tot: "2026-12-31" }] }, { gebruiker: "t", boeken: true });
+
+    const q3 = doorbelastingPerKlant(ctx, "2026-07-01", "2026-09-30").klanten[0];
+    assert.equal(q3.ingekocht, 3000, "juli t/m september inkoop (de september-inkoop is gefactureerd in oktober)");
+    assert.equal(q3.verkocht, Math.round(18000 * 92 / 365), "kwart van de jaarfactuur (92 dagen)");
+    const jaar = doorbelastingPerKlant(ctx, "2026-01-01", "2026-12-31").klanten[0];
+    assert.equal(jaar.ingekocht, 12000);
+    assert.equal(jaar.verkocht, 18000);
+    assert.equal(jaar.verschil, 6000);
+  } finally {
+    ctx.opruimen();
+  }
+});
+
+test("klant met meerdere handelsnamen: oude naam op inkoop wordt herkend", async () => {
+  const { zoekKlant, zoekRelatieMatch } = await import("../src/modules/relaties/service.ts");
+  const ctx = await testCtx();
+  try {
+    const id = slaRelatieOp(ctx, null, { naam: "Paneldeal", type: "klant", aliassen: "Akupaneldeal\n akupaneldeal.nl \n" }, "t");
+    assert.equal(zoekKlant(ctx, "Akupaneldeal.nl")?.id, id);
+    assert.equal(zoekKlant(ctx, "Paneldeal")?.id, id);
+    assert.equal(zoekRelatieMatch(ctx, { naam: "Akupaneldeal" })?.id, id);
+    const f = nieuweInkoopfactuur(ctx, "handmatig", { gebruiker: "t" });
+    ctx.db.run("INSERT INTO inkoopfactuur_regels (factuur_id, bedrag_excl, btw_code, btw_bedrag, doorbelast_naam) VALUES (?, 320, 'NL21', 67, 'Akupaneldeal.nl')", [f]);
+    assert.equal(koppelDoorbelastingen(ctx), 1);
+    assert.equal(ctx.db.get<{ doorbelast_relatie_id: number }>("SELECT doorbelast_relatie_id FROM inkoopfactuur_regels WHERE factuur_id = ?", [f])!.doorbelast_relatie_id, id);
+    assert.equal(ctx.db.get<{ aliassen: string }>("SELECT aliassen FROM relaties WHERE id = ?", [id])!.aliassen, "Akupaneldeal\nakupaneldeal.nl");
+  } finally {
+    ctx.opruimen();
+  }
+});
+
+test("marge-alarm: onder 20% (ook met jaarfactuur naar rato) en zonder verkoop", async () => {
+  const { margeAlarmen } = await import("../src/modules/rapportages/service.ts");
+  const ctx = await testCtx();
+  try {
+    const sw = categorieId(ctx, "Software & abonnementen");
+    const omzet = categorieId(ctx, "Omzet");
+    const lev = slaRelatieOp(ctx, null, { naam: "DSA", type: "leverancier" }, "t");
+    const goed = slaRelatieOp(ctx, null, { naam: "Goed BV", type: "klant" }, "t");
+    const krap = slaRelatieOp(ctx, null, { naam: "Krap BV", type: "klant" }, "t");
+    const niets = slaRelatieOp(ctx, null, { naam: "Vergeten BV", type: "klant" }, "t");
+    let nr = 0;
+    // Okt 2025 t/m sep 2026: per klant € 10 inkoop per maand
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(Date.UTC(2025, 9 + i, 1));
+      const ym = d.toISOString().slice(0, 7);
+      const laatste = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).toISOString().slice(0, 10);
+      for (const k of [goed, krap, niets]) {
+        const id = nieuweInkoopfactuur(ctx, "handmatig", { gebruiker: "t" });
+        werkFactuurBij(ctx, "inkoop", id, { relatie_id: lev, factuurnummer: `I${nr++}`, factuurdatum: laatste, regels: [{ categorie_id: sw, bedrag_excl: 1000, btw_code: "NL21", doorbelast_relatie_id: k, periode_van: `${ym}-01`, periode_tot: laatste }] }, { gebruiker: "t", boeken: true });
+      }
+    }
+    // Goed: jaarfactuur € 180 voor okt 2025 – sep 2026 (33% marge); Krap: € 130 (7,7% marge)
+    for (const [k, b] of [[goed, 18000], [krap, 13000]] as const) {
+      const v = nieuweVerkoopfactuur(ctx, "t");
+      werkFactuurBij(ctx, "verkoop", v, { relatie_id: k, factuurnummer: `V${k}`, factuurdatum: "2025-10-05", regels: [{ categorie_id: omzet, bedrag_excl: b, btw_code: "NL21", periode_van: "2025-10-01", periode_tot: "2026-09-30" }] }, { gebruiker: "t", boeken: true });
+    }
+    const r = margeAlarmen(ctx, new Date(2026, 9, 8)); // 8 okt 2026 → venster okt 2025 t/m sep 2026
+    assert.equal(r.van, "2025-10-01");
+    assert.equal(r.tot, "2026-09-30");
+    assert.deepEqual(r.alarmen.map((a) => a.naam), ["Vergeten BV", "Krap BV"]);
+    assert.equal(r.alarmen[0].marge, null);
+    assert.ok(Math.abs(r.alarmen[1].marge! - (1000 / 13000) * 100) < 0.01);
   } finally {
     ctx.opruimen();
   }

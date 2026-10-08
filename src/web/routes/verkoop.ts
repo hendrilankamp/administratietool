@@ -3,10 +3,10 @@ import type { Ctx } from "../../lib/context.ts";
 import { GebruikersFout } from "../../lib/context.ts";
 import { mollieIngesteld } from "../../integrations/mollie/index.ts";
 import { btwCodes } from "../../modules/btw/service.ts";
-import { factuurLijst, haalFactuur, nieuweVerkoopfactuur, verwijderFactuur, werkFactuurBij, zetHandmatigBetaald, zetRegelCategorieen } from "../../modules/facturen/service.ts";
+import { factuurLijst, haalFactuur, nieuweVerkoopfactuur, verwijderFactuur, werkFactuurBij, zetHandmatigBetaald, zetRegelCategorieen, zetRegelPerioden } from "../../modules/facturen/service.ts";
 import { haalTransactie } from "../../modules/bank/service.ts";
 import { categorieen, haalRelatie, relaties } from "../../modules/relaties/service.ts";
-import { datum, geheel, idParam, klaar, regelsUitFormulier, render, tekst } from "../render.ts";
+import { datum, geheel, idParam, klaar, periodeUitFormulier, regelsUitFormulier, render, tekst } from "../render.ts";
 import type { Diensten } from "../diensten.ts";
 
 export function verkoopRouter(ctx: Ctx, diensten: Diensten): Router {
@@ -61,8 +61,17 @@ export function verkoopRouter(ctx: Ctx, diensten: Diensten): Router {
     if (f.bron === "mollie") {
       const cats: Record<number, number | null> = {};
       for (const [k, v] of Object.entries((b.categorie ?? {}) as Record<string, string>)) cats[Number(k)] = geheel(v);
-      zetRegelCategorieen(ctx, "verkoop", id, cats, gebruiker(req));
-      return klaar(ctx, req, res, `/verkoop/${id}`, "Categorieën opgeslagen.");
+      // Categorieën alleen opslaan als ze veranderd zijn (kan niet in een afgesloten periode; perioden wel)
+      if (f.regels.some((r) => r.id in cats && cats[r.id] !== r.categorie_id)) zetRegelCategorieen(ctx, "verkoop", id, cats, gebruiker(req));
+      const perioden: Record<number, { van: string | null; tot: string | null }> = {};
+      const vans = (b.periode_van ?? {}) as Record<string, string>;
+      const tots = (b.periode_tot ?? {}) as Record<string, string>;
+      for (const k of new Set([...Object.keys(vans), ...Object.keys(tots)])) {
+        const p = periodeUitFormulier(vans[k], tots[k]);
+        perioden[Number(k)] = { van: p.periode_van, tot: p.periode_tot };
+      }
+      zetRegelPerioden(ctx, "verkoop", id, perioden, gebruiker(req));
+      return klaar(ctx, req, res, `/verkoop/${id}`, "Categorieën en perioden opgeslagen.");
     }
     werkFactuurBij(
       ctx,

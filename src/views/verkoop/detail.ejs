@@ -13,11 +13,12 @@
            <strong>Factuurdatum:</strong> <%= nlDatum(f.factuurdatum) %> · <strong>Vervaldatum:</strong> <%= nlDatum(f.vervaldatum) %></p>
         <div class="tabel-wrap">
           <table>
-            <thead><tr><th>Omschrijving</th><th>Categorie</th><th>BTW</th><th class="bedrag">Excl.</th><th class="bedrag">BTW</th></tr></thead>
+            <thead><tr><th>Omschrijving</th><th>Periode</th><th>Categorie</th><th>BTW</th><th class="bedrag">Excl.</th><th class="bedrag">BTW</th></tr></thead>
             <tbody>
             <% f.regels.forEach(r => { %>
               <tr>
                 <td><%= r.omschrijving %></td>
+                <td class="nowrap"><div class="periode-invoer"><input type="month" name="periode_van[<%= r.id %>]" value="<%= r.periode_van ? r.periode_van.slice(0, 7) : '' %>"><span class="hulp">t/m</span><input type="month" name="periode_tot[<%= r.id %>]" value="<%= r.periode_tot ? r.periode_tot.slice(0, 7) : '' %>"></div></td>
                 <td><select name="categorie[<%= r.id %>]"><option value="">–</option><% categorieen.forEach(c => { %><option value="<%= c.id %>" <%= r.categorie_id === c.id ? 'selected' : '' %>><%= c.naam %></option><% }) %></select></td>
                 <td><%= r.btw_code %></td>
                 <td class="bedrag"><%= euro(r.bedrag_excl) %></td>
@@ -25,10 +26,11 @@
               </tr>
             <% }) %>
             </tbody>
-            <tfoot><tr><td colspan="3" class="rechts">Totaal incl. <%= euro(f.totaal_incl) %></td><td class="bedrag"><%= euro(f.totaal_excl) %></td><td class="bedrag"><%= euro(f.totaal_btw) %></td></tr></tfoot>
+            <tfoot><tr><td colspan="4" class="rechts">Totaal incl. <%= euro(f.totaal_incl) %></td><td class="bedrag"><%= euro(f.totaal_excl) %></td><td class="bedrag"><%= euro(f.totaal_btw) %></td></tr></tfoot>
           </table>
         </div>
-        <button type="submit" class="primair">Categorieën opslaan</button>
+        <button type="submit" class="primair">Categorieën en perioden opslaan</button>
+        <p class="hulp">Periode: bv. jan t/m dec voor een jaarfactuur. In de rapportage “Doorbelasting per klant” wordt het bedrag dan naar rato over de maanden verdeeld.</p>
       <% } else { %>
         <div class="rij">
           <div><label for="rel">Klant</label>

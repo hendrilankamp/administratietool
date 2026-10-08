@@ -42,6 +42,10 @@ const schema = z.object({
   AI_LIMIET_MAAND: z.coerce.number().min(0).max(10000).default(10),
   AI_MAX_PAGINAS: z.coerce.number().int().min(1).max(100).default(10),
 
+  // Marge-alarm voor doorbelaste inkoop: minimale marge in % over de laatste N volledige maanden
+  MARGE_MIN: z.coerce.number().min(0).max(100).default(20),
+  MARGE_MAANDEN: z.coerce.number().int().min(1).max(36).default(12),
+
   // Eigen bedrijf: om eigen (verkoop)facturen te herkennen die per e-mail binnenkomen (bv. in bcc)
   EIGEN_NAAM: optioneel,
   EIGEN_BTW: optioneel,

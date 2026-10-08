@@ -134,6 +134,8 @@ form.inline { display: inline; }
 .regels .col-btw { width: 150px; }
 .regels .col-klant { min-width: 150px; }
 .mt-klein { margin-top: 0.25rem; }
+.periode-invoer { display: flex; align-items: center; gap: 0.3rem; margin-top: 0.25rem; }
+.periode-invoer input { width: auto; padding: 0.2rem 0.3rem; font-size: 0.85rem; }
 .verborgen { display: none !important; }
 .qr svg { width: 220px; height: 220px; background: #fff; padding: 8px; border-radius: 8px; }
 .inlog { max-width: 400px; margin: 10vh auto; }

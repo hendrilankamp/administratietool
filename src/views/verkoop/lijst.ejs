@@ -14,13 +14,19 @@
   <% if (aantalGeannuleerd) { %><div class="smal"><label><input type="checkbox" name="geannuleerd" value="1" <%= query.geannuleerd === '1' ? 'checked' : '' %>> Toon geannuleerde (<%= aantalGeannuleerd %>)</label></div><% } %>
   <div class="smal"><button type="submit">Filter</button></div>
 </form>
+<form method="post" action="/rapportages/markeer-betaald" data-bevestig="Geselecteerde facturen markeren als ontvangen (op de vervaldatum, of anders de factuurdatum)?">
+<%- include('../partials/csrf') %><input type="hidden" name="soort" value="verkoop"><input type="hidden" name="terug" value="/verkoop<%= query.betaal ? '?betaal=' + query.betaal : '' %>">
+<% if (facturen.some(f => f.status === 'geboekt' && f.betaalstatus !== 'betaald')) { %>
+  <div class="acties mt1"><button class="klein" type="submit">Geselecteerde markeren als ontvangen</button><span class="hulp">Voor contante betalingen of ontvangsten van vóór de eerste bankimport.</span></div>
+<% } %>
 <div class="tabel-wrap mt1">
 <table class="klikbaar">
-  <thead><tr><th>Datum</th><th>Factuurnr.</th><th>Klant</th><th>Bron</th><th class="bedrag">Excl.</th><th class="bedrag">Totaal</th><th class="bedrag">Open</th><th>Status</th></tr></thead>
+  <thead><tr><th><input type="checkbox" data-alles-selecteren title="Alles selecteren"></th><th>Datum</th><th>Factuurnr.</th><th>Klant</th><th>Bron</th><th class="bedrag">Excl.</th><th class="bedrag">Totaal</th><th class="bedrag">Open</th><th>Status</th></tr></thead>
   <tbody>
-  <% if (!facturen.length) { %><tr><td colspan="8" class="zacht">Geen facturen.</td></tr><% } %>
+  <% if (!facturen.length) { %><tr><td colspan="9" class="zacht">Geen facturen.</td></tr><% } %>
   <% facturen.forEach(f => { %>
     <tr data-href="/verkoop/<%= f.id %>">
+      <td><% if (f.status === 'geboekt' && f.betaalstatus !== 'betaald') { %><input type="checkbox" name="ids[]" value="<%= f.id %>"><% } %></td>
       <td class="nowrap"><%= nlDatum(f.factuurdatum) %></td>
       <td><a href="/verkoop/<%= f.id %>"><%= f.factuurnummer || ('#' + f.id) %></a></td>
       <td><%= f.relatie_naam || '—' %></td>
@@ -34,4 +40,5 @@
   </tbody>
 </table>
 </div>
+</form>
 <%- include('../partials/voet') %>

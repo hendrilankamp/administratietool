@@ -35,25 +35,28 @@
   <p class="hulp">Nog geen doorbelaste inkoop in deze periode. Kies op een inkoopfactuur per regel “Doorbelasten aan”.</p>
 <% } else { %>
 <div class="tabel-wrap"><table>
-  <thead><tr><th>Klant</th><th class="bedrag">Ingekocht</th><th class="bedrag">Gefactureerd</th><th class="bedrag">Verschil</th><th>Details</th></tr></thead>
+  <thead><tr><th>Klant</th><th class="bedrag">Ingekocht</th><th class="bedrag">Gefactureerd</th><th class="bedrag">Verschil</th><th class="bedrag">Marge</th><th>Details</th></tr></thead>
   <tbody>
   <% doorbelasting.klanten.forEach(k => { %>
     <tr>
-      <td><a href="/relaties/<%= k.relatie_id %>"><%= k.naam %></a><% if (!k.verkoopfacturen.length) { %> <span class="label-status fout">geen verkoopfactuur</span><% } %></td>
+      <td><a href="/relaties/<%= k.relatie_id %>"><%= k.naam %></a><% if (!k.verkoop.length) { %> <span class="label-status fout">geen verkoopfactuur</span><% } %></td>
       <td class="bedrag"><%= euro(k.ingekocht) %></td>
       <td class="bedrag"><%= euro(k.verkocht) %></td>
       <td class="bedrag <%= k.verschil < 0 ? 'negatief' : '' %>"><%= euro(k.verschil) %></td>
-      <td><details><summary class="klein"><%= k.regels.length %> inkoopregel(s), <%= k.verkoopfacturen.length %> verkoopfactuur/-facturen</summary>
+      <% const m = k.verkocht > 0 ? (k.verkocht - k.ingekocht) / k.verkocht * 100 : null; %>
+      <td class="bedrag"><span class="label-status <%= m === null || m < margeMin ? 'fout' : 'ok' %>"><%= m === null ? '–' : m.toFixed(0) + '%' %></span></td>
+      <% const per = (r) => r.periode_van ? ' · periode ' + nlDatum(r.periode_van) + ' t/m ' + nlDatum(r.periode_tot) : ''; const deel = (r) => r.aandeel < 0.999 ? ' (' + Math.round(r.aandeel * 100) + '% van ' + euro(r.bedrag_excl) + ')' : ''; %>
+      <td><details><summary class="klein"><%= k.regels.length %> inkoopregel(s), <%= k.verkoop.length %> verkoopregel(s)</summary>
         <ul class="klein">
-          <% k.regels.forEach(r => { %><li>Inkoop <a href="/inkoop/<%= r.factuur_id %>"><%= r.factuurnummer || '#' + r.factuur_id %></a> <%= r.leverancier ? '(' + r.leverancier + ')' : '' %> <%= nlDatum(r.factuurdatum) %>: <%= r.omschrijving || '' %><%= r.periode ? ' · ' + r.periode : '' %> – <%= euro(r.bedrag_excl) %></li><% }) %>
-          <% k.verkoopfacturen.forEach(v => { %><li>Verkoop <a href="/verkoop/<%= v.id %>"><%= v.factuurnummer || '#' + v.id %></a> <%= nlDatum(v.factuurdatum) %> – <%= euro(v.totaal_excl) %></li><% }) %>
+          <% k.regels.forEach(r => { %><li>Inkoop <a href="/inkoop/<%= r.factuur_id %>"><%= r.factuurnummer || '#' + r.factuur_id %></a> <%= r.leverancier ? '(' + r.leverancier + ')' : '' %>: <%= r.omschrijving || '' %><%= per(r) %> – <%= euro(r.deel) %><%= deel(r) %></li><% }) %>
+          <% k.verkoop.forEach(r => { %><li>Verkoop <a href="/verkoop/<%= r.factuur_id %>"><%= r.factuurnummer || '#' + r.factuur_id %></a> <%= nlDatum(r.factuurdatum) %>: <%= r.omschrijving || '' %><%= per(r) %> – <%= euro(r.deel) %><%= deel(r) %></li><% }) %>
         </ul></details></td>
     </tr>
   <% }) %>
   </tbody>
-  <tfoot><tr><td>Totaal</td><td class="bedrag"><%= euro(doorbelasting.klanten.reduce((s, k) => s + k.ingekocht, 0)) %></td><td class="bedrag"><%= euro(doorbelasting.klanten.reduce((s, k) => s + k.verkocht, 0)) %></td><td class="bedrag"><%= euro(doorbelasting.klanten.reduce((s, k) => s + k.verschil, 0)) %></td><td></td></tr></tfoot>
+  <tfoot><tr><td>Totaal</td><td class="bedrag"><%= euro(doorbelasting.klanten.reduce((s, k) => s + k.ingekocht, 0)) %></td><td class="bedrag"><%= euro(doorbelasting.klanten.reduce((s, k) => s + k.verkocht, 0)) %></td><td class="bedrag"><%= euro(doorbelasting.klanten.reduce((s, k) => s + k.verschil, 0)) %></td><td></td><td></td></tr></tfoot>
 </table></div>
-<p class="hulp">“Gefactureerd” is het totaal van alle verkoopfacturen aan deze klant in de periode (ook voor andere diensten). Een negatief verschil betekent dat je meer inkoopt dan je doorbelast. Kies “Heel jaar” om jaarlijkse facturen tegenover maandelijkse inkoop te zien.</p>
+<p class="hulp">Bedragen worden naar rato verdeeld over de periode van elke regel: een jaarfactuur (periode jan t/m dec) telt per kwartaal voor een kwart mee. Regels zonder periode tellen op de factuurdatum. Stel de periode in op de factuur (ook bij Mollie-facturen). “Gefactureerd” omvat alle verkoopregels aan deze klant, ook voor andere diensten.</p>
 <% } %>
 
 <% const periodeTekst = kw ? 'Q' + kw + ' ' + jaar : String(jaar); %>

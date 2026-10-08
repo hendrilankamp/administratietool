@@ -17,6 +17,7 @@ export interface Relatie {
   standaard_categorie_id: number | null;
   standaard_btw_code: string | null;
   notities: string | null;
+  aliassen: string | null;
 }
 
 const leegNull = (v: unknown) => (typeof v === "string" && v.trim() === "" ? null : v);
@@ -36,6 +37,11 @@ export const relatieSchema = z.object({
   standaard_categorie_id: z.preprocess((v) => (v === "" || v === null || v === undefined ? null : Number(v)), z.number().int().positive().nullable()),
   standaard_btw_code: tekst(30),
   notities: tekst(2000),
+  // Andere (handels)namen, één per regel
+  aliassen: z.preprocess(
+    (v) => (typeof v === "string" ? [...new Set(v.split(/\r?\n/).map((x) => x.trim()).filter(Boolean))].join("\n") || null : v),
+    z.string().max(2000).nullable().optional(),
+  ),
 });
 export type RelatieInvoer = { naam: string; type: string; [veld: string]: unknown };
 
@@ -51,9 +57,9 @@ export function relaties(ctx: Ctx, filter: { zoek?: string; type?: "klant" | "le
   const waar: string[] = [];
   const p: string[] = [];
   if (filter.zoek) {
-    waar.push("(naam LIKE ? OR iban LIKE ? OR btw_nummer LIKE ? OR email LIKE ?)");
+    waar.push("(naam LIKE ? OR iban LIKE ? OR btw_nummer LIKE ? OR email LIKE ? OR aliassen LIKE ?)");
     const z = `%${filter.zoek}%`;
-    p.push(z, z, z, z);
+    p.push(z, z, z, z, z);
   }
   if (filter.type) {
     waar.push("(type = ? OR type = 'beide')");
@@ -82,12 +88,13 @@ export function slaRelatieOp(ctx: Ctx, id: number | null, invoer: RelatieInvoer,
     d.standaard_categorie_id,
     d.standaard_btw_code ?? null,
     d.notities ?? null,
+    d.aliassen ?? null,
   ];
   return ctx.db.tx(() => {
     if (id === null) {
       const r = ctx.db.run(
-        `INSERT INTO relaties (naam, type, kvk, btw_nummer, iban, email, adres, postcode, plaats, land, standaard_categorie_id, standaard_btw_code, notities)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO relaties (naam, type, kvk, btw_nummer, iban, email, adres, postcode, plaats, land, standaard_categorie_id, standaard_btw_code, notities, aliassen)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         kolommen,
       );
       audit(ctx.db, gebruiker, "aangemaakt", "relaties", r.id, d);
@@ -97,7 +104,7 @@ export function slaRelatieOp(ctx: Ctx, id: number | null, invoer: RelatieInvoer,
     if (!oud) throw new GebruikersFout("Relatie niet gevonden", 404);
     ctx.db.run(
       `UPDATE relaties SET naam=?, type=?, kvk=?, btw_nummer=?, iban=?, email=?, adres=?, postcode=?, plaats=?, land=?,
-         standaard_categorie_id=?, standaard_btw_code=?, notities=?, gewijzigd_op=? WHERE id=?`,
+         standaard_categorie_id=?, standaard_btw_code=?, notities=?, aliassen=?, gewijzigd_op=? WHERE id=?`,
       [...kolommen, new Date().toISOString(), id],
     );
     audit(ctx.db, gebruiker, "gewijzigd", "relaties", id, { voor: oud, na: d });
@@ -140,12 +147,19 @@ export function zoekRelatieMatch(ctx: Ctx, gegevens: { btw_nummer?: string | nul
   if (gegevens.naam) {
     const doel = normNaam(gegevens.naam);
     if (doel.length < 3) return undefined;
-    return ctx.db.all<Relatie>("SELECT * FROM relaties").find((r) => {
-      const n = normNaam(r.naam);
-      return n === doel || (n.length >= 4 && (doel.startsWith(n) || n.startsWith(doel)));
-    });
+    const alle = ctx.db.all<Relatie>("SELECT * FROM relaties");
+    // Eerst exacte naam of alias, dan gedeeltelijke overeenkomst
+    return (
+      alle.find((r) => namenVan(r).some((n) => n === doel)) ??
+      alle.find((r) => namenVan(r).some((n) => n.length >= 4 && (doel.startsWith(n) || n.startsWith(doel))))
+    );
   }
   return undefined;
+}
+
+/** Genormaliseerde naam plus alternatieve namen van een relatie. */
+export function namenVan(r: Pick<Relatie, "naam" | "aliassen">): string[] {
+  return [r.naam, ...(r.aliassen ?? "").split("\n")].map((x) => normNaam(x)).filter((x) => x.length >= 3);
 }
 
 /** Zoekt een klant (of 'beide') op naam, ook als de naam een domein is (bv. "lunieq.nl" → "Lunieq"). */
@@ -155,11 +169,10 @@ export function zoekKlant(ctx: Ctx, naam: string): Relatie | undefined {
   for (const v of varianten) {
     const doel = normNaam(v);
     if (doel.length < 3) continue;
-    const r = klanten.find((k) => {
-      const n = normNaam(k.naam);
-      const domein = k.email ? normNaam(k.email.split("@")[1]?.replace(/\.[a-z]+$/i, "") ?? "") : "";
-      return n === doel || domein === doel || (n.length >= 4 && (doel.startsWith(n) || n.startsWith(doel)));
-    });
+    const domeinVan = (k: Relatie) => (k.email ? normNaam(k.email.split("@")[1]?.replace(/\.[a-z]+$/i, "") ?? "") : "");
+    const r =
+      klanten.find((k) => namenVan(k).includes(doel) || domeinVan(k) === doel) ??
+      klanten.find((k) => namenVan(k).some((n) => n.length >= 4 && (doel.startsWith(n) || n.startsWith(doel))));
     if (r) return r;
   }
   return undefined;

@@ -30,19 +30,27 @@
 <% } %>
 <% if (facturen.some(f => f.ai_status === 'wachtrij' || f.ai_status === 'bezig')) { %><span data-vernieuw="6"></span><p class="hulp">AI is bezig met uitlezen; deze pagina vernieuwt automatisch.</p><% } %>
 
+<% if (tab !== 'geboekt') { %>
 <form method="post" action="/inkoop/verwijderen-selectie" data-bevestig="Geselecteerde facturen verwijderen? (De e-mail blijft in Outlook staan.)">
 <%- include('../partials/csrf') %>
-<% if (tab !== 'geboekt' && facturen.length) { %>
+<% if (facturen.length) { %>
   <div class="acties"><button class="klein gevaar" type="submit">Geselecteerde verwijderen</button><span class="hulp">Gebruik dit voor documenten die geen inkoopfactuur zijn.</span></div>
+<% } %>
+<% } else { %>
+<form method="post" action="/rapportages/markeer-betaald" data-bevestig="Geselecteerde facturen markeren als betaald (op de vervaldatum, of anders de factuurdatum)?">
+<%- include('../partials/csrf') %><input type="hidden" name="soort" value="inkoop"><input type="hidden" name="terug" value="/inkoop?tab=geboekt<%= query.betaal ? '&betaal=' + query.betaal : '' %>">
+<% if (facturen.some(f => f.betaalstatus !== 'betaald')) { %>
+  <div class="acties"><button class="klein" type="submit">Geselecteerde markeren als betaald</button><span class="hulp">Voor facturen die al betaald zijn maar niet via een banktransactie gekoppeld (bv. incasso, creditcard of van vóór de eerste bankimport). Tip: filter op “Nog te betalen”.</span></div>
+<% } %>
 <% } %>
 <div class="tabel-wrap mt1">
 <table class="klikbaar">
-  <thead><tr><% if (tab !== 'geboekt') { %><th><input type="checkbox" data-alles-selecteren title="Alles selecteren"></th><% } %><th>#</th><th>Datum</th><th>Leverancier</th><th>Factuurnr.</th><th>Omschrijving</th><th class="bedrag">Totaal</th><th>Status</th><% if (tab !== 'geboekt') { %><th>AI</th><% } %></tr></thead>
+  <thead><tr><th><input type="checkbox" data-alles-selecteren title="Alles selecteren"></th><th>#</th><th>Datum</th><th>Leverancier</th><th>Factuurnr.</th><th>Omschrijving</th><th class="bedrag">Totaal</th><th>Status</th><% if (tab !== 'geboekt') { %><th>AI</th><% } %></tr></thead>
   <tbody>
   <% if (!facturen.length) { %><tr><td colspan="9" class="zacht">Geen facturen.</td></tr><% } %>
   <% facturen.forEach(f => { const url = '/inkoop/' + f.id; %>
     <tr data-href="<%= url %>">
-      <% if (tab !== 'geboekt') { %><td><input type="checkbox" name="ids[]" value="<%= f.id %>"></td><% } %>
+      <td><% if (tab !== 'geboekt' || f.betaalstatus !== 'betaald') { %><input type="checkbox" name="ids[]" value="<%= f.id %>"><% } %></td>
       <td><a href="<%= url %>"><%= f.id %></a></td>
       <td class="nowrap"><a href="<%= url %>"><%= nlDatum(f.factuurdatum) || '—' %></a></td>
       <td><a href="<%= url %>"><%= f.relatie_naam || (f.ai_voorstel ? (JSON.parse(f.ai_voorstel).leverancier || {}).naam || 'onbekend' : 'onbekend') %></a></td>

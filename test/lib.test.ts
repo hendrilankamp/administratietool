@@ -84,3 +84,19 @@ test("backuprotatie bewaart dag/week/maand/jaar", () => {
   const jaren = new Set([...bewaar].map((i) => datums[i].getFullYear()));
   assert.ok(jaren.has(2024) && jaren.has(2025));
 });
+
+test("perioden lezen en naar rato verdelen", async () => {
+  const { parsePeriode, overlapFractie, maandGrenzen } = await import("../src/lib/datum.ts");
+  assert.deepEqual(parsePeriode("01.09.2026 tot 01.10.2026"), { van: "2026-09-01", tot: "2026-09-30" });
+  assert.deepEqual(parsePeriode("14.09.2026 tot 01.10.2026"), { van: "2026-09-14", tot: "2026-09-30" });
+  assert.deepEqual(parsePeriode("01-01-2026 t/m 31-12-2026"), { van: "2026-01-01", tot: "2026-12-31" });
+  assert.deepEqual(parsePeriode("02-2021 T/M 12-2021"), { van: "2021-02-01", tot: "2021-12-31" });
+  assert.deepEqual(parsePeriode("september 2026"), { van: "2026-09-01", tot: "2026-09-30" });
+  assert.deepEqual(parsePeriode("2026-01-01 - 2026-12-31"), { van: "2026-01-01", tot: "2026-12-31" });
+  assert.equal(parsePeriode("onzin"), null);
+  assert.deepEqual(maandGrenzen("2024-02"), { van: "2024-02-01", tot: "2024-02-29" });
+  // Jaarfactuur 2026: Q1 = 90/365 deel
+  assert.ok(Math.abs(overlapFractie("2026-01-01", "2026-03-31", "2026-01-01", "2026-12-31") - 90 / 365) < 1e-9);
+  assert.equal(overlapFractie("2026-10-01", "2026-12-31", "2026-09-01", "2026-09-30"), 0);
+  assert.equal(overlapFractie("2026-01-01", "2026-12-31", "2026-09-01", "2026-09-30"), 1);
+});

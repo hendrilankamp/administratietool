@@ -1,6 +1,6 @@
 import type { Ctx } from "../../lib/context.ts";
 import { audit, GebruikersFout } from "../../lib/context.ts";
-import { isGeldigeDatum } from "../../lib/datum.ts";
+import { isGeldigeDatum, parsePeriode } from "../../lib/datum.ts";
 import { kiesBtwCode, type AiVoorstel } from "../../integrations/ai/extract.ts";
 import { categorieen, normaliseerBtwNummer, slaRelatieOp, zoekRelatieMatch } from "../relaties/service.ts";
 import { haalFactuur, verwerkRegels } from "./service.ts";
@@ -77,9 +77,10 @@ export function zetOmNaarVerkoop(ctx: Ctx, inkoopId: number, gebruiker: string, 
     const regels = v?.regels?.length
       ? v.regels.map((r) => {
           const code = kiesBtwCode(r.btw_tarief, v.btw_verlegd, v.ontvanger?.land ?? "NL", v.ontvanger?.btw_nummer ?? null);
-          return { omschrijving: r.omschrijving.slice(0, 500), categorie_id: omzet, bedrag_excl: Math.round(r.bedrag_excl * 100), btw_code: code, btw_bedrag: Math.round(r.btw_bedrag * 100) };
+          const p = parsePeriode(r.periode);
+          return { omschrijving: r.omschrijving.slice(0, 500), categorie_id: omzet, bedrag_excl: Math.round(r.bedrag_excl * 100), btw_code: code, btw_bedrag: Math.round(r.btw_bedrag * 100), periode_van: p?.van ?? null, periode_tot: p?.tot ?? null };
         })
-      : f.regels.map((r) => ({ omschrijving: r.omschrijving, categorie_id: omzet, bedrag_excl: r.bedrag_excl, btw_code: r.btw_code, btw_bedrag: r.btw_bedrag }));
+      : f.regels.map((r) => ({ omschrijving: r.omschrijving, categorie_id: omzet, bedrag_excl: r.bedrag_excl, btw_code: r.btw_code, btw_bedrag: r.btw_bedrag, periode_van: r.periode_van ?? null, periode_tot: r.periode_tot ?? null }));
     const verwerkt = verwerkRegels(ctx, "verkoop", regels);
     const datum = (d: string | null | undefined) => (d && isGeldigeDatum(d) ? d : null);
 
@@ -99,8 +100,8 @@ export function zetOmNaarVerkoop(ctx: Ctx, inkoopId: number, gebruiker: string, 
       ],
     ).id;
     for (const r of verwerkt.regels) {
-      ctx.db.run("INSERT INTO verkoopfactuur_regels (factuur_id, volgorde, omschrijving, categorie_id, bedrag_excl, btw_code, btw_bedrag) VALUES (?, ?, ?, ?, ?, ?, ?)", [
-        verkoopId, r.volgorde, r.omschrijving ?? null, r.categorie_id ?? null, r.bedrag_excl, r.btw_code, r.btw_bedrag,
+      ctx.db.run("INSERT INTO verkoopfactuur_regels (factuur_id, volgorde, omschrijving, categorie_id, bedrag_excl, btw_code, btw_bedrag, periode_van, periode_tot) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", [
+        verkoopId, r.volgorde, r.omschrijving ?? null, r.categorie_id ?? null, r.bedrag_excl, r.btw_code, r.btw_bedrag, r.periode_van ?? null, r.periode_tot ?? null,
       ]);
     }
     ctx.db.run("DELETE FROM inkoopfacturen WHERE id = ?", [inkoopId]);

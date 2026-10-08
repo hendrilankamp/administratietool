@@ -12,6 +12,8 @@ export const INSTELBAAR = {
   AI_MODEL: { geheim: false, schema: z.string().regex(/^claude-[a-z0-9.-]{3,60}$/, "Ongeldige modelnaam") },
   AI_LIMIET_MAAND: { geheim: false, schema: z.number().min(0, "Limiet kan niet negatief zijn").max(10000) },
   AI_MAX_PAGINAS: { geheim: false, schema: z.number().int().min(1).max(100) },
+  MARGE_MIN: { geheim: false, schema: z.number().min(0).max(100) },
+  MARGE_MAANDEN: { geheim: false, schema: z.number().int().min(1).max(36) },
   // Bedrijfsgegevens: meerdere waarden mogelijk (bv. oud en nieuw BTW-nummer)
   EIGEN_NAAM: { geheim: false, schema: z.array(z.string().trim().min(2, "Bedrijfsnaam is te kort").max(100)).min(1).max(10) },
   EIGEN_BTW: {

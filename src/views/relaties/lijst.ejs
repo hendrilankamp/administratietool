@@ -11,12 +11,12 @@
   <div class="smal"><button type="submit">Filter</button></div>
 </form>
 <div class="tabel-wrap mt1">
-<table>
+<table class="klikbaar">
   <thead><tr><th>Naam</th><th>Type</th><th>BTW-nummer</th><th>IBAN</th><th>E-mail</th><th>Land</th></tr></thead>
   <tbody>
   <% if (!relaties.length) { %><tr><td colspan="6" class="zacht">Geen relaties.</td></tr><% } %>
   <% relaties.forEach(r => { %>
-    <tr><td><a href="/relaties/<%= r.id %>"><%= r.naam %></a></td><td><%= r.type %></td><td class="mono"><%= r.btw_nummer || '' %></td><td class="mono"><%= r.iban || '' %></td><td><%= r.email || '' %></td><td><%= r.land %></td></tr>
+    <tr data-href="/relaties/<%= r.id %>"><td><a href="/relaties/<%= r.id %>"><%= r.naam %></a><% if (r.aliassen) { %><br><span class="hulp">ook: <%= r.aliassen.split('\n').join(', ') %></span><% } %></td><td><%= r.type %></td><td class="mono"><%= r.btw_nummer || '' %></td><td class="mono"><%= r.iban || '' %></td><td><%= r.email || '' %></td><td><%= r.land %></td></tr>
   <% }) %>
   </tbody>
 </table>

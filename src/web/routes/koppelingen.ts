@@ -53,6 +53,9 @@ export function koppelingenRoutes(ctx: Ctx, r: Router): void {
       veld("AI_MODEL");
       veld("AI_LIMIET_MAAND", "getal");
       veld("AI_MAX_PAGINAS", "getal");
+    } else if (sectie === "marge") {
+      veld("MARGE_MIN", "getal");
+      veld("MARGE_MAANDEN", "getal");
     } else if (sectie === "bedrijf") {
       veld("EIGEN_NAAM", "lijst");
       veld("EIGEN_BTW", "lijst");

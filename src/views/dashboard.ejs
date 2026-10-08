@@ -9,6 +9,11 @@
     <ul><% fouten.forEach(t => { %><li><strong><%= t.naam %></strong>: <%= t.laatste_fout %></li><% }) %></ul>
   </div>
 <% } %>
+<% if (marge.alarmen.length) { %>
+  <div class="melding fout"><strong>Marge-alarm:</strong> <%= marge.alarmen.length %> klant(en) onder <%= marge.minimum %>% marge op doorbelaste inkoop (<%= nlDatum(marge.van) %> t/m <%= nlDatum(marge.tot) %>):
+    <ul><% marge.alarmen.slice(0, 8).forEach(a => { %><li><a href="/relaties/<%= a.relatie_id %>"><%= a.naam %></a>: ingekocht <%= euro(a.ingekocht) %>, gefactureerd <%= euro(a.verkocht) %> → <%= a.marge === null ? 'geen verkoop' : a.marge.toFixed(0) + '% marge' %></li><% }) %></ul>
+    <a href="/rapportages?jaar=<%= marge.tot.slice(0, 4) %>#doorbelasting">Bekijk doorbelasting per klant</a></div>
+<% } %>
 <% if (externUit) { %><div class="melding fout">Externe backups staan nog uit: kies een versleutelingssleutel onder <a href="/instellingen#backup">Instellingen → Backupbeveiliging</a>.</div><% } %>
 <% if (nogInTeStellen.length) { %><div class="melding info">Nog niet gekoppeld: <%= nogInTeStellen.join(', ') %>. <a href="/instellingen">Naar Instellingen</a></div><% } %>
 <% if (outlook && outlook.status !== 'gekoppeld') { %><div class="melding let">Outlook is niet gekoppeld. <a href="/instellingen#outlook">Koppel Outlook</a> om facturen automatisch op te halen.</div><% } %>

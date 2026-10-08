@@ -76,7 +76,9 @@ export function relatiesRouter(ctx: Ctx): Router {
       if (e instanceof z.ZodError) throw new GebruikersFout(e.issues.map((i) => i.message).join(", "));
       throw e;
     }
-    klaar(ctx, req, res, `/relaties/${id}`, "Opgeslagen.");
+    const d = koppelDoorbelastingen(ctx);
+    const n = koppelOnbekendeLeveranciers(ctx);
+    klaar(ctx, req, res, `/relaties/${id}`, `Opgeslagen.${d ? ` ${d} inkoopregel(s) gekoppeld voor doorbelasting.` : ""}${n ? ` ${n} factuur/facturen gekoppeld.` : ""}`);
   });
 
   r.post("/:id/verwijderen", (req, res) => {
