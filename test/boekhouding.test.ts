@@ -188,3 +188,29 @@ test("Mollie: één afwijkende factuur stopt de synchronisatie niet", async () =
     ctx.opruimen();
   }
 });
+
+test("Mollie: paginagrootte maximaal 100 en alle pagina's worden opgehaald", async () => {
+  const ctx = await testCtx({ MOLLIE_TOKEN: "access_test1234567890" });
+  const origineel = globalThis.fetch;
+  const urls: string[] = [];
+  globalThis.fetch = (async (input: string | URL) => {
+    const url = new URL(String(input));
+    urls.push(url.toString());
+    const limit = Number(url.searchParams.get("limit"));
+    if (!(limit >= 1 && limit <= 100)) return new Response(JSON.stringify({ status: 422, detail: "The limit should be a number between 1 and 100" }), { status: 422 });
+    const tweede = url.searchParams.has("from");
+    const inv = { ...mollieFactuur, id: tweede ? "invoice_2" : "invoice_1", invoiceNumber: tweede ? "2026-0002" : "2026-0001", _links: {} };
+    return new Response(JSON.stringify({
+      _embedded: { sales_invoices: [inv] },
+      _links: { next: tweede ? null : { href: "https://api.mollie.com/v2/sales-invoices?from=invoice_2&limit=100" } },
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  }) as typeof fetch;
+  try {
+    const res = await syncVerkoopfacturen(ctx);
+    assert.equal(res.nieuw, 2);
+    assert.ok(urls.every((u) => Number(new URL(u).searchParams.get("limit")) <= 100));
+  } finally {
+    globalThis.fetch = origineel;
+    ctx.opruimen();
+  }
+});

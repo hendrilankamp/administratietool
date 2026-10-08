@@ -198,7 +198,7 @@ export interface MollieSyncResultaat {
 
 /** Importeert/actualiseert verkoopfacturen uit Mollie Facturatie. */
 export async function syncVerkoopfacturen(ctx: Ctx, facturen?: MollieSalesInvoice[]): Promise<MollieSyncResultaat> {
-  const lijst = facturen ?? (await alles<MollieSalesInvoice>(ctx, "/sales-invoices?limit=250"));
+  const lijst = facturen ?? (await alles<MollieSalesInvoice>(ctx, "/sales-invoices?limit=100"));
   const omzet = categorieen(ctx).find((c) => c.soort === "omzet")?.id ?? null;
   const res: MollieSyncResultaat = { nieuw: 0, bijgewerkt: 0, overgeslagen: 0, fouten: 0, waarschuwingen: [] };
 
@@ -323,7 +323,7 @@ interface MolliePayment {
 }
 
 export async function syncUitbetalingen(ctx: Ctx): Promise<{ uitbetalingen: number; gekoppeldeFacturen: number }> {
-  const settlements = await alles<MollieSettlement>(ctx, "/settlements?limit=250", 1000);
+  const settlements = await alles<MollieSettlement>(ctx, "/settlements?limit=100", 1000);
   let gekoppeld = 0;
   let n = 0;
   for (const s of settlements) {
@@ -351,7 +351,7 @@ export async function syncUitbetalingen(ctx: Ctx): Promise<{ uitbetalingen: numb
     }
     n++;
     // Welke verkoopfacturen zitten in deze uitbetaling?
-    const betalingen = await alles<MolliePayment>(ctx, `/settlements/${s.id}/payments?limit=250`, 5000);
+    const betalingen = await alles<MolliePayment>(ctx, `/settlements/${s.id}/payments?limit=100`, 5000);
     const facturen = ctx.db.all<{ id: number; factuurnummer: string | null; totaal_incl: number; mollie_betaalreferenties: string | null }>(
       "SELECT id, factuurnummer, totaal_incl, mollie_betaalreferenties FROM verkoopfacturen WHERE bron = 'mollie'",
     );
