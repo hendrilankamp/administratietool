@@ -1,0 +1,35 @@
+<%- include('../partials/kop') %>
+<h1>Leningen <span class="hulp">(privé aan de zaak)</span></h1>
+<div class="paneel"><strong>Nog af te lossen aan privé: <%= euro(totaal) %></strong>
+  <p class="hulp mb0">Stortingen vanuit privé verhogen de schuld, aflossingen verlagen hem. Geboekt via de bank (Afletteren) of handmatig. De rente is alleen ter info en wordt niet meegerekend.</p></div>
+
+<% if (!lijst.length) { %><p class="hulp">Nog geen leningen. Maak er hieronder één aan.</p><% } else { %>
+<div class="tabel-wrap"><table>
+  <thead><tr><th>Lening</th><th>Start</th><th class="bedrag">Geleend</th><th class="bedrag">Afgelost</th><th class="bedrag">Nog af te lossen</th></tr></thead>
+  <tbody>
+  <% lijst.forEach(l => { %>
+    <tr>
+      <td><a href="/leningen/<%= l.id %>"><%= l.naam %></a><%= l.afgesloten ? ' (afgesloten)' : '' %><%= l.rente_pct !== null ? ' · ' + String(l.rente_pct).replace('.', ',') + '% rente' : '' %></td>
+      <td><%= nlDatum(l.startdatum) %></td>
+      <td class="bedrag"><%= euro(l.geleend) %></td>
+      <td class="bedrag"><%= euro(l.afgelost) %></td>
+      <td class="bedrag"><strong class="<%= l.openstaand < 0 ? 'negatief' : '' %>"><%= euro(l.openstaand) %></strong></td>
+    </tr>
+  <% }) %>
+  </tbody>
+  <tfoot><tr><td colspan="4">Totaal nog af te lossen (niet-afgesloten)</td><td class="bedrag"><%= euro(totaal) %></td></tr></tfoot>
+</table></div>
+<% } %>
+
+<form method="post" action="/leningen" class="paneel">
+  <%- include('../partials/csrf') %>
+  <h3 class="mb0">Nieuwe lening</h3>
+  <div class="rij">
+    <div><label for="ln">Naam</label><input id="ln" name="naam" placeholder="bv. Lening privé aan Medialan" required></div>
+    <div class="smal"><label for="ls">Startdatum</label><input id="ls" type="date" name="startdatum"></div>
+    <div class="smal"><label for="lr">Rente %</label><input id="lr" name="rente_pct" inputmode="decimal" placeholder="optioneel"></div>
+  </div>
+  <div class="veld mt1"><label for="lno">Notitie</label><input id="lno" name="notitie" placeholder="bv. afspraak over aflossing"></div>
+  <div class="acties"><button class="primair" type="submit">Aanmaken</button></div>
+</form>
+<%- include('../partials/voet') %>

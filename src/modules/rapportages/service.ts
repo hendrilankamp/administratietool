@@ -171,6 +171,11 @@ export async function exportAccountant(ctx: Ctx, jaar: number): Promise<string> 
     q(`SELECT t.datum, t.van, t.naar, t.doel, r.naam AS klant, t.retour, t.kilometers, printf('%.2f', t.tarief_ct / 100.0) AS tarief_per_km, printf('%.2f', t.kilometers * t.tarief_ct / 100.0) AS vergoeding
        FROM ritten t LEFT JOIN relaties r ON r.id = t.relatie_id WHERE t.datum BETWEEN ? AND ? ORDER BY t.datum, t.id`),
   );
+  csv(
+    "leningen.csv",
+    q(`SELECT l.naam AS lening, b.datum, b.omschrijving, printf('%.2f', b.bedrag / 100.0) AS bedrag_plus_geleend_min_afgelost, b.transactie_id
+       FROM lening_boekingen b JOIN leningen l ON l.id = b.lening_id WHERE b.datum BETWEEN ? AND ? ORDER BY l.naam, b.datum, b.id`),
+  );
   csv("relaties.csv", ctx.db.all("SELECT id, naam, type, kvk, btw_nummer, iban, email, adres, postcode, plaats, land FROM relaties ORDER BY naam"));
 
   const wv = winstEnVerlies(ctx, van, tot);

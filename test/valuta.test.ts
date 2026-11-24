@@ -74,3 +74,33 @@ test("bank toont bestelnummer i.p.v. factuurnummer: koppelen op referentie uit d
     ctx.opruimen();
   }
 });
+
+test("referenties uit AI: tekst met komma's, JSON-lijst en lege waarde", async () => {
+  const { leesReferenties } = await import("../src/modules/bank/service.ts");
+  assert.deepEqual(leesReferenties("20264844523, AB12"), ["20264844523"]);
+  assert.deepEqual(leesReferenties('["20264844523"]'), ["20264844523"]);
+  assert.deepEqual(leesReferenties(null), []);
+});
+
+test("zakelijk percentage per leverancier: regel gesplitst, totaal gelijk, BTW-aftrek alleen zakelijk deel", async () => {
+  const { vertaalVoorstel } = await import("../src/integrations/ai/extract.ts");
+  const ctx = await testCtx();
+  try {
+    slaRelatieOp(ctx, null, { naam: "Ziggo Zakelijk", type: "leverancier", btw_nummer: "NL810983510B01", zakelijk_pct: "50" }, "test");
+    const v = vertaalVoorstel(ctx, {
+      is_factuur: true,
+      leverancier: { naam: "Ziggo Zakelijk", btw_nummer: "NL810983510B01", kvk: null, iban: null, email: null, adres: null, postcode: null, plaats: null, land: "NL" },
+      ontvanger: null, factuurnummer: "Z1", referenties: null, factuurdatum: "2026-11-01", vervaldatum: null, valuta: "EUR", is_creditnota: false, btw_verlegd: false,
+      regels: [{ omschrijving: "Internet", klant: null, periode: null, bedrag_excl: 50, btw_tarief: 21, btw_bedrag: 10.5 }],
+      totaal_excl: 50, totaal_btw: 10.5, totaal_incl: 60.5, al_betaald: false, voorgestelde_categorie: "Telefoon & internet", opmerkingen: null,
+    } as never);
+    assert.equal(v.regels.length, 2);
+    assert.equal(v.regels[0].bedrag_excl, 2500);
+    assert.equal(v.regels[0].btw_bedrag, 525);
+    assert.equal(v.regels[1].btw_code, "GEEN");
+    assert.equal(v.regels[1].bedrag_excl, 3025);
+    assert.equal(v.regels.reduce((s, r) => s + r.bedrag_excl + r.btw_bedrag, 0), 6050);
+  } finally {
+    ctx.opruimen();
+  }
+});

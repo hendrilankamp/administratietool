@@ -164,15 +164,16 @@ export interface OpenPost {
   mollie: boolean;
 }
 
-/** Referenties uit json_extract (JSON-tekst) naar een lijst; alleen bruikbare nummers (min. 5 tekens). */
+/** Referenties (lijst, of tekst met komma's/puntkomma's, ook als JSON-tekst) naar een lijst; alleen bruikbare nummers (min. 5 tekens). */
 export function leesReferenties(ruw: unknown): string[] {
   let lijst: unknown = ruw;
   if (typeof ruw === "string") {
     try {
       lijst = JSON.parse(ruw);
     } catch {
-      return [];
+      lijst = ruw;
     }
+    if (!Array.isArray(lijst)) lijst = ruw.split(/[,;\n]+/);
   }
   return Array.isArray(lijst) ? lijst.filter((x): x is string => typeof x === "string").map((x) => x.trim()).filter((x) => norm(x).length >= 5) : [];
 }
@@ -380,6 +381,7 @@ export function koppel(ctx: Ctx, txId: number, invoer: KoppelInvoer[], opties: {
 export function ontkoppel(ctx: Ctx, txId: number, gebruiker: string): void {
   ctx.db.tx(() => {
     ctx.db.run("DELETE FROM transactie_koppelingen WHERE transactie_id = ?", [txId]);
+    ctx.db.run("DELETE FROM lening_boekingen WHERE transactie_id = ?", [txId]);
     ctx.db.run("UPDATE banktransacties SET categorie_id = NULL, status = 'open' WHERE id = ?", [txId]);
     audit(ctx.db, gebruiker, "ontkoppeld", "banktransacties", txId);
   });
@@ -483,7 +485,7 @@ export function kandidaatAfschrijvingen(
   ctx: Ctx,
   f: { id: number; factuurnummer: string | null; factuurdatum: string | null; totaal_incl: number; valuta: string; wisselkoers?: number | null },
   leverancier: { naam: string | null; iban: string | null },
-  referenties: string[] = [],
+  referenties: unknown = [],
 ): AfschrijvingKandidaat[] {
   const nr = norm(f.factuurnummer);
   const naam = norm(leverancier.naam);

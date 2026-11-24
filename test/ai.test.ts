@@ -19,7 +19,7 @@ function voorstel(leverancier: string, btw: string | null = null): AiVoorstel {
     factuurnummer: "F1",
     factuurdatum: "2026-10-01",
     vervaldatum: null,
-    valuta: "EUR",
+    valuta: "EUR", referenties: null,
     is_creditnota: false,
     btw_verlegd: false,
     regels: [{ omschrijving: "Hosting", klant: null, periode: null, bedrag_excl: 10, btw_tarief: 21, btw_bedrag: 2.1 }],

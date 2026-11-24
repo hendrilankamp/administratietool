@@ -18,6 +18,8 @@ export interface Relatie {
   standaard_btw_code: string | null;
   notities: string | null;
   aliassen: string | null;
+  /** Zakelijk deel van inkoopfacturen (gemengd gebruik); null = 100%. */
+  zakelijk_pct: number | null;
 }
 
 const leegNull = (v: unknown) => (typeof v === "string" && v.trim() === "" ? null : v);
@@ -37,6 +39,11 @@ export const relatieSchema = z.object({
   standaard_categorie_id: z.preprocess((v) => (v === "" || v === null || v === undefined ? null : Number(v)), z.number().int().positive().nullable()),
   standaard_btw_code: tekst(30),
   notities: tekst(2000),
+  // Zakelijk percentage bij gemengd gebruik; leeg of 100 = alles zakelijk
+  zakelijk_pct: z.preprocess(
+    (v) => (v === "" || v === null || v === undefined || Number(v) === 100 ? null : Number(String(v).replace(",", "."))),
+    z.number().int("Geef een heel percentage").min(1, "Percentage tussen 1 en 100").max(100, "Percentage tussen 1 en 100").nullable(),
+  ),
   // Andere (handels)namen, één per regel
   aliassen: z.preprocess(
     (v) => (typeof v === "string" ? [...new Set(v.split(/\r?\n/).map((x) => x.trim()).filter(Boolean))].join("\n") || null : v),
@@ -89,12 +96,13 @@ export function slaRelatieOp(ctx: Ctx, id: number | null, invoer: RelatieInvoer,
     d.standaard_btw_code ?? null,
     d.notities ?? null,
     d.aliassen ?? null,
+    d.zakelijk_pct,
   ];
   return ctx.db.tx(() => {
     if (id === null) {
       const r = ctx.db.run(
-        `INSERT INTO relaties (naam, type, kvk, btw_nummer, iban, email, adres, postcode, plaats, land, standaard_categorie_id, standaard_btw_code, notities, aliassen)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO relaties (naam, type, kvk, btw_nummer, iban, email, adres, postcode, plaats, land, standaard_categorie_id, standaard_btw_code, notities, aliassen, zakelijk_pct)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         kolommen,
       );
       audit(ctx.db, gebruiker, "aangemaakt", "relaties", r.id, d);
@@ -104,7 +112,7 @@ export function slaRelatieOp(ctx: Ctx, id: number | null, invoer: RelatieInvoer,
     if (!oud) throw new GebruikersFout("Relatie niet gevonden", 404);
     ctx.db.run(
       `UPDATE relaties SET naam=?, type=?, kvk=?, btw_nummer=?, iban=?, email=?, adres=?, postcode=?, plaats=?, land=?,
-         standaard_categorie_id=?, standaard_btw_code=?, notities=?, aliassen=?, gewijzigd_op=? WHERE id=?`,
+         standaard_categorie_id=?, standaard_btw_code=?, notities=?, aliassen=?, zakelijk_pct=?, gewijzigd_op=? WHERE id=?`,
       [...kolommen, new Date().toISOString(), id],
     );
     audit(ctx.db, gebruiker, "gewijzigd", "relaties", id, { voor: oud, na: d });

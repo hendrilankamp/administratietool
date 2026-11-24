@@ -32,6 +32,10 @@
       <select name="standaard_btw_code"><option value="">–</option><% btwCodes.forEach(c => { %><option value="<%= c.code %>" <%= r.standaard_btw_code === c.code ? 'selected' : '' %>><%= c.omschrijving %></option><% }) %></select></div>
   </div>
   <div class="rij mt1">
+    <div class="smal"><label for="zp">Zakelijk deel %</label><input id="zp" name="zakelijk_pct" inputmode="numeric" value="<%= r.zakelijk_pct || '' %>" placeholder="100"></div>
+    <div class="hulp" style="align-self:end">Voor gemengd gebruik (bv. internet thuis: 50). Bij nieuwe inkoopfacturen van deze leverancier wordt alleen dit deel als kosten met BTW-aftrek geboekt; de rest komt als privé op een aparte regel. Het factuurtotaal blijft gelijk aan de bankafschrijving.</div>
+  </div>
+  <div class="rij mt1">
     <div><label>Andere namen (één per regel, bv. oude handelsnaam of websitenaam)</label><textarea name="aliassen" rows="2" placeholder="Akupaneldeal&#10;akupaneldeal.nl"><%= r.aliassen || '' %></textarea></div>
     <div><label>Notities</label><textarea name="notities" rows="2"><%= r.notities || '' %></textarea></div>
   </div>

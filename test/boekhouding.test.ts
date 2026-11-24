@@ -89,7 +89,7 @@ test("AI-voorstel: BTW-code keuze, controles en leveranciermatch", async () => {
       factuurnummer: "5123456789",
       factuurdatum: "2026-09-30",
       vervaldatum: null,
-      valuta: "EUR",
+      valuta: "EUR", referenties: null,
       is_creditnota: false,
       btw_verlegd: true,
       regels: [{ omschrijving: "Google Ads", klant: null, periode: null, bedrag_excl: 250.0, btw_tarief: 0, btw_bedrag: 0 }],

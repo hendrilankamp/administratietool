@@ -1,0 +1,69 @@
+<%- include('../partials/kop') %>
+<div class="acties mb0"><a href="/leningen">← Leningen</a></div>
+<h1><%= l.naam %><%= l.afgesloten ? ' (afgesloten)' : '' %></h1>
+<div class="paneel">
+  <div class="kolommen">
+    <div><label>Geleend</label><%= euro(l.geleend) %></div>
+    <div><label>Afgelost</label><%= euro(l.afgelost) %></div>
+    <div><label>Nog af te lossen</label><strong class="<%= l.openstaand < 0 ? 'negatief' : '' %>"><%= euro(l.openstaand) %></strong></div>
+  </div>
+  <% if (l.openstaand < 0) { %><p class="hulp mb0">Negatief: er is meer afgelost dan geleend. Controleer of een beginstand ontbreekt.</p><% } %>
+  <% if (l.notitie) { %><p class="hulp mb0"><%= l.notitie %></p><% } %>
+</div>
+
+<h2>Boekingen</h2>
+<% if (!boekingen.length) { %><p class="hulp">Nog geen boekingen.</p><% } else { %>
+<div class="tabel-wrap"><table>
+  <thead><tr><th>Datum</th><th>Omschrijving</th><th>Bron</th><th class="bedrag">Bedrag</th><th></th></tr></thead>
+  <tbody>
+  <% boekingen.forEach(b => { %>
+    <tr>
+      <td class="nowrap"><%= nlDatum(b.datum) %></td>
+      <td><%= b.omschrijving || '' %><span class="hulp"> <%= b.bedrag > 0 ? '(geleend)' : '(afgelost)' %></span></td>
+      <td><% if (b.transactie_id) { %><a href="/bank/transacties/<%= b.transactie_id %>">bank<%= b.tegenpartij ? ': ' + b.tegenpartij : '' %></a><% } else { %>handmatig<% } %></td>
+      <td class="bedrag <%= b.bedrag < 0 ? 'negatief' : '' %>"><%= euro(b.bedrag) %></td>
+      <td><% if (!b.transactie_id) { %><form method="post" action="/leningen/<%= l.id %>/boeking/<%= b.id %>/verwijderen" data-bevestig="Deze boeking verwijderen?"><%- include('../partials/csrf') %><button class="klein gevaar" type="submit">×</button></form><% } %></td>
+    </tr>
+  <% }) %>
+  </tbody>
+</table></div>
+<% } %>
+
+<form method="post" action="/leningen/<%= l.id %>/boeking" class="paneel">
+  <%- include('../partials/csrf') %>
+  <h3 class="mb0">Handmatige boeking</h3>
+  <p class="hulp">Voor een beginstand van vóór je bankimport, of als je zakelijk iets met privégeld hebt betaald.</p>
+  <div class="rij">
+    <div class="smal"><label for="bd">Datum</label><input id="bd" type="date" name="datum" value="<%= vandaag %>" required></div>
+    <div class="smal"><label for="bs">Soort</label><select id="bs" name="soort"><option value="geleend">Geleend (schuld stijgt)</option><option value="afgelost">Afgelost (schuld daalt)</option></select></div>
+    <div class="smal"><label for="bb">Bedrag</label><input id="bb" name="bedrag" inputmode="decimal" required></div>
+    <div><label for="bo">Omschrijving</label><input id="bo" name="omschrijving" placeholder="bv. Beginstand"></div>
+    <div class="smal"><label>&nbsp;</label><button type="submit">Toevoegen</button></div>
+  </div>
+</form>
+
+<div class="paneel">
+  <h3 class="mb0">Banktransactie op deze lening boeken</h3>
+  <p class="hulp">Bijschrijving = geleend, afschrijving = afgelost. Alleen open transacties zonder factuur.</p>
+  <form method="get" class="rij"><div><input name="zoek" value="<%= zoek %>" placeholder="Zoek op naam, omschrijving of IBAN"></div><div class="smal"><button type="submit">Zoeken</button></div></form>
+  <div class="tabel-wrap mt1"><table>
+    <thead><tr><th>Datum</th><th>Tegenpartij / omschrijving</th><th class="bedrag">Bedrag</th><th></th></tr></thead>
+    <tbody>
+    <% if (!open.length) { %><tr><td colspan="4" class="zacht">Geen open transacties gevonden.</td></tr><% } %>
+    <% open.forEach(t => { %>
+      <tr>
+        <td class="nowrap"><%= nlDatum(t.boekdatum) %></td>
+        <td><strong><%= t.tegenpartij_naam || '' %></strong><br><span class="klein zacht"><%= (t.omschrijving || '').slice(0, 120) %></span></td>
+        <td class="bedrag <%= t.bedrag < 0 ? 'negatief' : '' %>"><%= euro(t.bedrag) %></td>
+        <td><form method="post" action="/leningen/<%= l.id %>/transactie"><%- include('../partials/csrf') %><input type="hidden" name="transactie_id" value="<%= t.id %>"><button class="klein" type="submit"><%= t.bedrag > 0 ? 'Boek als storting' : 'Boek als aflossing' %></button></form></td>
+      </tr>
+    <% }) %>
+    </tbody>
+  </table></div>
+</div>
+
+<div class="acties">
+  <form method="post" action="/leningen/<%= l.id %>/afsluiten" class="inline"><%- include('../partials/csrf') %><% if (l.afgesloten) { %><input type="hidden" name="heropen" value="1"><% } %><button type="submit"><%= l.afgesloten ? 'Heropenen' : 'Lening afsluiten' %></button></form>
+  <% if (!boekingen.length) { %><form method="post" action="/leningen/<%= l.id %>/verwijderen" class="inline" data-bevestig="Deze lening verwijderen?"><%- include('../partials/csrf') %><button class="gevaar" type="submit">Verwijderen</button></form><% } %>
+</div>
+<%- include('../partials/voet') %>

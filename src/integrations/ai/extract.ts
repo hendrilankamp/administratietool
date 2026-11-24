@@ -89,10 +89,7 @@ function voorstelSchema(categorieNamen: [string, ...string[]]) {
       .nullable()
       .describe("aan wie de factuur gericht is (geadresseerde, 'Aan'/'Factuuradres'); null als niet vermeld"),
     factuurnummer: z.string().nullable(),
-    referenties: z
-      .array(z.string())
-      .optional()
-      .describe("andere nummers op de factuur waarmee de betaling op een bankafschrift te herkennen is: bestelnummer/ordernummer, betalingskenmerk, transactie- of orderreferentie. Niet het factuurnummer zelf, geen klantnummer, KvK of BTW-nummer. Lege lijst als er geen zijn"),
+    referenties: z.string().nullable().describe("bestel-/ordernummers of betalingskenmerken op de factuur, gescheiden door komma's (niet het factuurnummer, geen klant-, KvK- of BTW-nummer); null als er geen zijn"),
     factuurdatum: z.string().nullable().describe("YYYY-MM-DD"),
     vervaldatum: z.string().nullable().describe("YYYY-MM-DD"),
     valuta: z.string().describe("ISO-valutacode, bv. EUR"),
@@ -196,6 +193,50 @@ export function kiesBtwCode(tarief: number, verlegd: boolean, land: string | nul
   return tarief === 0 ? "NL0" : "NL21";
 }
 
+type VoorstelRegel = {
+  omschrijving: string;
+  categorie_id: number | null;
+  bedrag_excl: number;
+  btw_code: string;
+  btw_bedrag: number;
+  doorbelast_naam: string | null;
+  doorbelast_relatie_id: number | null;
+  periode: string | null;
+  periode_van: string | null;
+  periode_tot: string | null;
+};
+
+/**
+ * Gemengd gebruik: splitst elke regel in een zakelijk deel (met BTW-aftrek) en een privédeel (categorie Privé, geen BTW-aftrek).
+ * Het factuurtotaal blijft gelijk, zodat de bankafschrijving er nog op aansluit.
+ */
+export function splitZakelijk(ctx: Ctx, regels: VoorstelRegel[], pct: number | null, meldingen: string[]): VoorstelRegel[] {
+  if (!pct || pct >= 100) return regels;
+  const prive = ctx.db.get<{ id: number }>("SELECT id FROM categorieen WHERE naam = 'Privé'")?.id ?? null;
+  if (!prive) return regels;
+  const uit: VoorstelRegel[] = [];
+  for (const r of regels) {
+    const zExcl = Math.round((r.bedrag_excl * pct) / 100);
+    const zBtw = Math.round((r.btw_bedrag * pct) / 100);
+    const privBedrag = r.bedrag_excl + r.btw_bedrag - zExcl - zBtw; // privédeel incl. BTW: die is niet aftrekbaar
+    uit.push({ ...r, omschrijving: `${r.omschrijving} (zakelijk ${pct}%)`.slice(0, 500), bedrag_excl: zExcl, btw_bedrag: zBtw });
+    if (privBedrag !== 0) {
+      uit.push({
+        ...r,
+        omschrijving: `${r.omschrijving} (privé ${100 - pct}%)`.slice(0, 500),
+        categorie_id: prive,
+        bedrag_excl: privBedrag,
+        btw_code: "GEEN",
+        btw_bedrag: 0,
+        doorbelast_naam: null,
+        doorbelast_relatie_id: null,
+      });
+    }
+  }
+  meldingen.push(`Gemengd gebruik: ${pct}% zakelijk en ${100 - pct}% privé. Elke regel is gesplitst; het totaal blijft gelijk aan de factuur.`);
+  return uit;
+}
+
 /** Vertaalt een AI-voorstel naar factuurvelden + controles. Puur (geen database-schrijfacties) voor testbaarheid. */
 export function vertaalVoorstel(ctx: Ctx, v: AiVoorstel) {
   const meldingen: string[] = [];
@@ -258,6 +299,8 @@ export function vertaalVoorstel(ctx: Ctx, v: AiVoorstel) {
   if (v.al_betaald) meldingen.push("Volgens de factuur is deze al betaald (bv. creditcard/incasso).");
   if (v.opmerkingen) meldingen.push(`AI: ${v.opmerkingen}`);
 
+  const regelsUit = splitZakelijk(ctx, regels, relatie?.zakelijk_pct ?? null, meldingen);
+
   return {
     relatie_id: relatie?.id ?? null,
     factuurnummer: v.factuurnummer,
@@ -265,7 +308,7 @@ export function vertaalVoorstel(ctx: Ctx, v: AiVoorstel) {
     vervaldatum,
     valuta,
     omschrijving: v.regels.length === 1 ? v.regels[0].omschrijving.slice(0, 200) : null,
-    regels,
+    regels: regelsUit,
     meldingen,
   };
 }

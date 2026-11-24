@@ -14,7 +14,7 @@ const dsa: AiVoorstel = {
   is_factuur: true,
   leverancier: { naam: "DSA ICT Services & Software B.V.", btw_nummer: "NL009624892B01", kvk: "24171009", iban: "NL06ABNA0504587080", email: "sales@dsaict.com", adres: "Oslo 12", postcode: "2993 LD", plaats: "Barendrecht", land: "NL" },
   ontvanger: { naam: "MediaLan", btw_nummer: "NL215839572B01", kvk: null, email: null, adres: "Kievit 40", postcode: "7462 ZJ", plaats: "Rijssen", land: "NL" },
-  factuurnummer: "F20268778", factuurdatum: "2026-10-02", vervaldatum: "2026-10-16", valuta: "EUR", is_creditnota: false, btw_verlegd: false,
+  factuurnummer: "F20268778", factuurdatum: "2026-10-02", vervaldatum: "2026-10-16", valuta: "EUR", referenties: null, is_creditnota: false, btw_verlegd: false,
   regels: [
     { omschrijving: "Microsoft Exchange Online Plan 1", klant: "Akupaneldeal.nl", periode: "01.09.2026 tot 01.10.2026", bedrag_excl: 3.2, btw_tarief: 21, btw_bedrag: 0.67 },
     { omschrijving: "Microsoft 365 Business Basic", klant: "Florano", periode: "14.09.2026 tot 01.10.2026", bedrag_excl: 2.56, btw_tarief: 21, btw_bedrag: 0.54 },
