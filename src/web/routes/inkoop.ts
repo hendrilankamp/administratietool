@@ -5,13 +5,14 @@ import { audit, GebruikersFout } from "../../lib/context.ts";
 import { bewaarBijlage, MAX_BIJLAGE } from "../../lib/bijlagen.ts";
 import { aiBeschikbaar, type AiVoorstel } from "../../integrations/ai/extract.ts";
 import { btwCodes, eisOpenPeriode } from "../../modules/btw/service.ts";
-import { factuurLijst, haalFactuur, nieuweInkoopfactuur, verwijderFactuur, werkFactuurBij, zetHandmatigBetaald } from "../../modules/facturen/service.ts";
+import { factuurLijst, haalFactuur, nieuweInkoopfactuur, rekenOm, verwijderFactuur, werkFactuurBij, zetHandmatigBetaald } from "../../modules/facturen/service.ts";
 import { categorieen, haalRelatie, relaties, slaRelatieOp } from "../../modules/relaties/service.ts";
-import { haalTransactie } from "../../modules/bank/service.ts";
+import { haalTransactie, kandidaatAfschrijvingen } from "../../modules/bank/service.ts";
 import { zetOmNaarVerkoop } from "../../modules/facturen/omzetten.ts";
 import { eigenGegevensIngesteld, isEigenLeverancier } from "../../modules/facturen/eigen.ts";
 import { actueleMeldingen, aanvullingen, koppelDoorbelastingen, koppelLeverancierAanFactuur, koppelOnbekendeLeveranciers, leverancierVelden, VELD_NAAM, vulLeverancierAan } from "../../modules/facturen/leverancier-uit-factuur.ts";
 import { csrfNaUpload } from "../sessie.ts";
+import { parseBedrag } from "../../lib/geld.ts";
 import { datum, geheel, idParam, klaar, lijst, regelsUitFormulier, render, tekst } from "../render.ts";
 import type { Diensten } from "../diensten.ts";
 
@@ -103,9 +104,15 @@ export function inkoopRouter(ctx: Ctx, diensten: Diensten): Router {
       transactie: haalTransactie(ctx, k.transactie_id),
     }));
     const email = f.email_bericht_id ? ctx.db.get("SELECT onderwerp, afzender, ontvangen_op FROM email_berichten WHERE id = ?", [f.email_bericht_id]) : null;
+    const rel = f.relatie_id ? haalRelatie(ctx, f.relatie_id) : null;
+    const afschrijvingen =
+      f.betaalstatus === "betaald" && f.status === "geboekt"
+        ? []
+        : kandidaatAfschrijvingen(ctx, f, { naam: rel?.naam ?? voorstel?.leverancier.naam ?? null, iban: rel?.iban ?? voorstel?.leverancier.iban ?? null }, voorstel?.referenties ?? []);
     render(ctx, req, res, "inkoop/detail", {
       titel: `Inkoopfactuur ${f.factuurnummer ?? `#${f.id}`}`,
       f,
+      afschrijvingen,
       voorstel,
       email,
       koppelingen,
@@ -129,7 +136,9 @@ export function inkoopRouter(ctx: Ctx, diensten: Diensten): Router {
   r.post("/:id", (req, res) => {
     const id = idParam(req.params.id);
     const b = req.body as Record<string, unknown>;
-    const boeken = b.actie === "boeken";
+    const actie = String(b.actie ?? "");
+    const boeken = actie === "boeken";
+    const omrekenen = /^omrekenen(_\d+)?$/.test(actie);
     werkFactuurBij(
       ctx,
       "inkoop",
@@ -140,10 +149,20 @@ export function inkoopRouter(ctx: Ctx, diensten: Diensten): Router {
         factuurdatum: datum(b.factuurdatum),
         vervaldatum: datum(b.vervaldatum),
         omschrijving: tekst(b.omschrijving),
+        valuta: tekst(b.valuta, 3),
         regels: regelsUitFormulier(b.regels),
       },
       { gebruiker: gebruiker(req), boeken },
     );
+    if (omrekenen) {
+      // "omrekenen_<centen>" = bedrag van een gevonden afschrijving; anders de ingevulde velden
+      const uitKnop = actie.includes("_") ? Number(actie.split("_")[1]) : null;
+      const koersTekst = tekst(b.koers, 20);
+      const koers = koersTekst ? Number(koersTekst.replace(",", ".")) : null;
+      if (koersTekst && (koers === null || !Number.isFinite(koers))) throw new GebruikersFout("Ongeldige wisselkoers");
+      rekenOm(ctx, id, { bedragEur: uitKnop ?? parseBedrag(tekst(b.bedrag_eur, 20)), koers: uitKnop || tekst(b.bedrag_eur, 20) ? null : koers }, gebruiker(req));
+      return klaar(ctx, req, res, `/inkoop/${id}`, "Omgerekend naar euro's. Controleer de bedragen en boek de factuur.");
+    }
     if (boeken) {
       // Door naar de volgende te beoordelen factuur
       const volgende = ctx.db.get<{ id: number }>("SELECT id FROM inkoopfacturen WHERE status = 'te_beoordelen' ORDER BY id LIMIT 1");
@@ -155,7 +174,7 @@ export function inkoopRouter(ctx: Ctx, diensten: Diensten): Router {
   r.post("/:id/ai", (req, res) => {
     const id = idParam(req.params.id);
     if (!aiBeschikbaar(ctx)) throw new GebruikersFout("Claude is nog niet ingesteld (Instellingen → AI-uitlezen)");
-    ctx.db.run("UPDATE inkoopfacturen SET ai_status = 'wachtrij', ai_melding = NULL WHERE id = ? AND status = 'te_beoordelen'", [id]);
+    ctx.db.run("UPDATE inkoopfacturen SET ai_status = 'wachtrij', ai_melding = NULL, wisselkoers = NULL, bedrag_valuta = NULL WHERE id = ? AND status = 'te_beoordelen'", [id]);
     // Bestaande regels wissen zodat het nieuwe voorstel ze kan invullen
     ctx.db.run("DELETE FROM inkoopfactuur_regels WHERE factuur_id = ? AND (SELECT status FROM inkoopfacturen WHERE id = ?) = 'te_beoordelen'", [id, id]);
     diensten.aiWachtrij();

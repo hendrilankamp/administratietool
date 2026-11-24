@@ -155,6 +155,8 @@ export interface OpenPost {
   factuurdatum: string | null;
   vervaldatum: string | null;
   totaal_incl: number;
+  /** Andere nummers van de factuur (bestelnummer e.d., uit het AI-voorstel) waarop de bank kan verwijzen. */
+  referenties: string[];
   /** Nog te ontvangen/betalen via de bank (factuurperspectief, positief bij normale factuur). */
   open: number;
   /** Bedrag zoals het op de bank zou verschijnen (verkoop +, inkoop −). */
@@ -162,20 +164,33 @@ export interface OpenPost {
   mollie: boolean;
 }
 
+/** Referenties uit json_extract (JSON-tekst) naar een lijst; alleen bruikbare nummers (min. 5 tekens). */
+export function leesReferenties(ruw: unknown): string[] {
+  let lijst: unknown = ruw;
+  if (typeof ruw === "string") {
+    try {
+      lijst = JSON.parse(ruw);
+    } catch {
+      return [];
+    }
+  }
+  return Array.isArray(lijst) ? lijst.filter((x): x is string => typeof x === "string").map((x) => x.trim()).filter((x) => norm(x).length >= 5) : [];
+}
+
 export function openPosten(ctx: Ctx): OpenPost[] {
   const verkoop = ctx.db.all<OpenPost>(
     `SELECT 'verkoop' AS soort, f.id, f.relatie_id, r.naam AS relatie_naam, r.iban AS relatie_iban, f.factuurnummer, f.factuurdatum, f.vervaldatum, f.totaal_incl,
-            f.totaal_incl - COALESCE(o.ontvangen_bank, 0) AS open, f.bron = 'mollie' AS mollie
+            f.totaal_incl - COALESCE(o.ontvangen_bank, 0) AS open, f.bron = 'mollie' AS mollie, NULL AS referenties
      FROM verkoopfacturen f LEFT JOIN relaties r ON r.id = f.relatie_id LEFT JOIN v_verkoop_ontvangen o ON o.factuur_id = f.id
      WHERE f.status = 'geboekt' AND f.betaald_handmatig_op IS NULL AND f.totaal_incl - COALESCE(o.ontvangen_bank, 0) <> 0`,
   );
   const inkoop = ctx.db.all<OpenPost>(
     `SELECT 'inkoop' AS soort, f.id, f.relatie_id, r.naam AS relatie_naam, r.iban AS relatie_iban, f.factuurnummer, f.factuurdatum, f.vervaldatum, f.totaal_incl,
-            f.totaal_incl - COALESCE(b.betaald_bank, 0) AS open, 0 AS mollie
+            f.totaal_incl - COALESCE(b.betaald_bank, 0) AS open, 0 AS mollie, json_extract(f.ai_voorstel, '$.referenties') AS referenties
      FROM inkoopfacturen f LEFT JOIN relaties r ON r.id = f.relatie_id LEFT JOIN v_inkoop_betaald b ON b.factuur_id = f.id
      WHERE f.status = 'geboekt' AND f.betaald_handmatig_op IS NULL AND f.totaal_incl - COALESCE(b.betaald_bank, 0) <> 0`,
   );
-  return [...verkoop, ...inkoop].map((p) => ({ ...p, mollie: !!p.mollie, bankBedrag: p.soort === "verkoop" ? p.open : -p.open }));
+  return [...verkoop, ...inkoop].map((p) => ({ ...p, referenties: leesReferenties(p.referenties), mollie: !!p.mollie, bankBedrag: p.soort === "verkoop" ? p.open : -p.open }));
 }
 
 const norm = (s: string | null | undefined) => (s ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -202,12 +217,19 @@ export function scoreMatch(t: Transactie, p: OpenPost): { score: number; redenen
   if (Math.sign(t.bedrag) !== Math.sign(p.bankBedrag)) return { score: 0, redenen };
   const omschr = norm(`${t.omschrijving} ${t.tegenpartij_naam}`);
   const nr = norm(p.factuurnummer);
+  // Volgorde van betrouwbaarheid: 1. factuurnummer, 2. bedrag, 3. IBAN/naam
   if (nr.length >= 3 && omschr.includes(nr)) {
-    score += 50;
+    score += 100;
     redenen.push("factuurnummer in omschrijving");
+  } else {
+    const ref = (p.referenties ?? []).find((r) => omschr.includes(norm(r)));
+    if (ref) {
+      score += 100;
+      redenen.push(`bestelnummer/referentie ${ref} in omschrijving`);
+    }
   }
   if (t.bedrag === p.bankBedrag) {
-    score += 30;
+    score += 60;
     redenen.push("bedrag exact gelijk");
   } else if (Math.abs(t.bedrag) < Math.abs(p.bankBedrag)) {
     score += 5;
@@ -388,9 +410,9 @@ export function autoAfletteren(ctx: Ctx, gebruiker = "systeem"): number {
     if (!eerste || eerste.soort === "regel") continue;
     const sluit = eerste.koppelingen.reduce((s, k) => s + k.bedrag, 0) + (eerste.rest?.bedrag ?? 0) === t.bedrag - (t.gekoppeld_bedrag ?? 0);
     const sterk =
-      (eerste.soort === "factuur" && eerste.redenen.includes("factuurnummer in omschrijving") && eerste.redenen.includes("bedrag exact gelijk")) ||
+      (eerste.soort === "factuur" && eerste.redenen.some((r) => /in omschrijving$/.test(r)) && eerste.redenen.includes("bedrag exact gelijk")) ||
       (eerste.soort === "mollie" && sluit);
-    if (sterk && sluit && (!tweede || tweede.score < 50)) {
+    if (sterk && sluit && (!tweede || eerste.score - tweede.score >= 50)) {
       koppel(ctx, t.id, eerste.koppelingen, { restCategorieId: eerste.rest?.categorieId, automatisch: true, gebruiker });
       n++;
     }
@@ -443,4 +465,64 @@ export function pasRegelsToe(ctx: Ctx, gebruiker: string): number {
     }
   }
   return n;
+}
+
+// ---------- Afschrijvingen bij een inkoopfactuur ----------
+
+export interface AfschrijvingKandidaat {
+  transactie: Transactie;
+  score: number;
+  redenen: string[];
+}
+
+/**
+ * Zoekt open afschrijvingen op de bank die bij een inkoopfactuur horen: op factuurnummer in de omschrijving,
+ * leverancier (IBAN of naam), datum en - alleen als de factuur in euro's staat - het bedrag.
+ */
+export function kandidaatAfschrijvingen(
+  ctx: Ctx,
+  f: { id: number; factuurnummer: string | null; factuurdatum: string | null; totaal_incl: number; valuta: string; wisselkoers?: number | null },
+  leverancier: { naam: string | null; iban: string | null },
+  referenties: string[] = [],
+): AfschrijvingKandidaat[] {
+  const nr = norm(f.factuurnummer);
+  const naam = norm(leverancier.naam);
+  const iban = leverancier.iban ? normaliseerIban(leverancier.iban) : null;
+  const inEuro = f.valuta === "EUR" || !!f.wisselkoers;
+  const reeds = new Set(ctx.db.all<{ transactie_id: number }>("SELECT transactie_id FROM transactie_koppelingen WHERE inkoopfactuur_id = ?", [f.id]).map((k) => k.transactie_id));
+  const van = f.factuurdatum ? new Date(Date.parse(f.factuurdatum) - 14 * 86400000).toISOString().slice(0, 10) : undefined;
+  const uit: AfschrijvingKandidaat[] = [];
+  for (const t of transacties(ctx, { status: "open", van, limiet: 5000 })) {
+    if (t.bedrag >= 0 || reeds.has(t.id) || t.bedrag - (t.gekoppeld_bedrag ?? 0) === 0) continue;
+    const tekst = norm(`${t.omschrijving} ${t.tegenpartij_naam}`);
+    const redenen: string[] = [];
+    let score = 0;
+    if (nr.length >= 3 && tekst.includes(nr)) {
+      score += 100;
+      redenen.push("factuurnummer in omschrijving");
+    } else {
+      const ref = leesReferenties(referenties).find((r) => tekst.includes(norm(r)));
+      if (ref) {
+        score += 100;
+        redenen.push(`bestelnummer/referentie ${ref} in omschrijving`);
+      }
+    }
+    if (inEuro && f.totaal_incl !== 0 && t.bedrag === -f.totaal_incl) {
+      score += 60;
+      redenen.push("bedrag exact gelijk");
+    }
+    if (iban && t.tegenpartij_iban && normaliseerIban(t.tegenpartij_iban) === iban) {
+      score += 25;
+      redenen.push("IBAN van leverancier");
+    } else if (naam.length >= 4) {
+      const a = norm(t.tegenpartij_naam);
+      if (a.length >= 4 && (a.includes(naam) || naam.includes(a)) || tekst.includes(naam)) {
+        score += 15;
+        redenen.push("naam leverancier");
+      }
+    }
+    if (f.factuurdatum && Math.abs(dagenVerschil(f.factuurdatum, t.boekdatum)) <= 45) score += 10;
+    if (score >= 25 && redenen.length > 0) uit.push({ transactie: t, score, redenen });
+  }
+  return uit.sort((a, b) => b.score - a.score).slice(0, 5);
 }

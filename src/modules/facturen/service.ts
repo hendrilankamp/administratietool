@@ -35,6 +35,7 @@ export const factuurSchema = z.object({
   factuurdatum: datum.nullable().optional(),
   vervaldatum: datum.nullable().optional(),
   omschrijving: z.string().trim().max(1000).nullable().optional(),
+  valuta: z.string().trim().regex(/^[A-Za-z]{3}$/, "Valuta is een code van 3 letters, bv. EUR of USD").nullable().optional(),
   regels: z.array(regelSchema).max(200),
 });
 export type FactuurInvoer = z.infer<typeof factuurSchema>;
@@ -48,6 +49,10 @@ export interface Factuur {
   vervaldatum: string | null;
   omschrijving: string | null;
   valuta: string;
+  /** Alleen inkoop, vreemde valuta: totaal incl. BTW in de factuurvaluta. */
+  bedrag_valuta?: number | null;
+  /** Alleen inkoop, vreemde valuta: euro's per 1 eenheid valuta; null = nog niet omgerekend. */
+  wisselkoers?: number | null;
   totaal_excl: number;
   totaal_btw: number;
   totaal_incl: number;
@@ -211,11 +216,30 @@ export function werkFactuurBij(ctx: Ctx, soort: Soort, id: number, invoer: Factu
     if (dubbel && wordtGeboekt) throw new GebruikersFout(`Factuurnummer ${data.factuurnummer} bestaat al voor deze relatie (factuur #${dubbel.id})`);
   }
   const nieuweStatus = wordtGeboekt ? "geboekt" : huidig.status;
+  // Valuta (alleen inkoop). Bij een geboekte factuur ligt ze vast; bij een wijziging vervalt een eerdere omrekening.
+  let valuta = huidig.valuta;
+  let wisselkoers = huidig.wisselkoers ?? null;
+  let bedragValuta = huidig.bedrag_valuta ?? null;
+  if (soort === "inkoop" && huidig.status !== "geboekt" && data.valuta) {
+    valuta = data.valuta.toUpperCase();
+    if (valuta !== huidig.valuta) {
+      wisselkoers = null;
+      bedragValuta = null;
+    }
+    if (valuta === "EUR") {
+      wisselkoers = null;
+      bedragValuta = null;
+    }
+  }
+  if (soort === "inkoop" && wordtGeboekt && valuta !== "EUR" && wisselkoers === null) {
+    throw new GebruikersFout(`Deze factuur is in ${valuta}. Reken hem eerst om naar euro's (vul het afgeschreven bedrag in euro's in en klik op Omrekenen).`);
+  }
 
   ctx.db.tx(() => {
     ctx.db.run(
       `UPDATE ${t.factuur} SET relatie_id = ?, factuurnummer = ?, factuurdatum = ?, vervaldatum = ?, omschrijving = ?,
          totaal_excl = ?, totaal_btw = ?, totaal_incl = ?, status = ?,
+         valuta = ?, wisselkoers = ?, bedrag_valuta = ?,
          geboekt_op = COALESCE(geboekt_op, CASE WHEN ? = 'geboekt' THEN ? END),
          gewijzigd_op = ?
        WHERE id = ?`,
@@ -229,6 +253,9 @@ export function werkFactuurBij(ctx: Ctx, soort: Soort, id: number, invoer: Factu
         v.totaal_btw,
         v.totaal_incl,
         nieuweStatus,
+        valuta,
+        wisselkoers,
+        bedragValuta,
         nieuweStatus,
         new Date().toISOString(),
         new Date().toISOString(),
@@ -328,5 +355,55 @@ export function zetRegelCategorieen(ctx: Ctx, soort: Soort, factuurId: number, c
       }
     }
     audit(ctx.db, gebruiker, "categorieen_gewijzigd", TABEL[soort].factuur, factuurId, categorieen);
+  });
+}
+
+/**
+ * Rekent een inkoopfactuur in vreemde valuta om naar euro's. Geef het afgeschreven bedrag in euro's (`bedragEur`, incl. BTW)
+ * of de koers (euro's per 1 eenheid valuta). De regels worden naar rato aangepast; een afrondingsverschil komt op de grootste regel.
+ * Voor de eerste omrekening staan de regels in de factuurvaluta; dat totaal wordt dan als `bedrag_valuta` bewaard.
+ */
+export function rekenOm(ctx: Ctx, id: number, doel: { bedragEur?: number | null; koers?: number | null }, gebruiker: string): void {
+  const f = haalFactuur(ctx, "inkoop", id);
+  if (!f) throw new GebruikersFout("Factuur niet gevonden", 404);
+  if (f.status !== "te_beoordelen") throw new GebruikersFout("Alleen een factuur die nog te beoordelen is kan worden omgerekend");
+  if (f.valuta === "EUR") throw new GebruikersFout("Deze factuur is al in euro's");
+  if (f.regels.length === 0 || f.totaal_incl === 0) throw new GebruikersFout("Vul eerst de regels van de factuur in");
+  const origineel = f.bedrag_valuta ?? f.totaal_incl; // eerste keer: de regels staan nog in de factuurvaluta
+  const teken = Math.sign(f.totaal_incl);
+  let doelCenten: number;
+  if (doel.bedragEur) {
+    doelCenten = Math.abs(doel.bedragEur);
+  } else if (doel.koers && doel.koers > 0) {
+    doelCenten = Math.round(Math.abs(origineel) * doel.koers);
+  } else {
+    throw new GebruikersFout("Vul het afgeschreven bedrag in euro's in, of de wisselkoers");
+  }
+  if (doelCenten <= 0) throw new GebruikersFout("Het bedrag in euro's moet groter zijn dan nul");
+  doelCenten *= teken;
+  const koers = Math.abs(doelCenten) / Math.abs(origineel);
+  if (koers < 0.0001 || koers > 10000) throw new GebruikersFout("Die koers is onwaarschijnlijk; controleer de bedragen");
+
+  const factor = doelCenten / f.totaal_incl;
+  const codes = btwCodeMap(ctx.db);
+  const nieuw = f.regels.map((r) => {
+    const excl = Math.round(r.bedrag_excl * factor);
+    const verlegd = codes.get(r.btw_code)?.verlegd;
+    return { id: r.id, excl, btw: verlegd ? 0 : Math.round(r.btw_bedrag * factor) };
+  });
+  const verschil = doelCenten - nieuw.reduce((s, r) => s + r.excl + r.btw, 0);
+  if (verschil !== 0) {
+    const grootste = nieuw.reduce((a, b) => (Math.abs(b.excl) > Math.abs(a.excl) ? b : a));
+    grootste.excl += verschil;
+  }
+  const totExcl = nieuw.reduce((s, r) => s + r.excl, 0);
+  const totBtw = nieuw.reduce((s, r) => s + r.btw, 0);
+  ctx.db.tx(() => {
+    for (const r of nieuw) ctx.db.run("UPDATE inkoopfactuur_regels SET bedrag_excl = ?, btw_bedrag = ? WHERE id = ? AND factuur_id = ?", [r.excl, r.btw, r.id, id]);
+    ctx.db.run(
+      "UPDATE inkoopfacturen SET totaal_excl = ?, totaal_btw = ?, totaal_incl = ?, bedrag_valuta = ?, wisselkoers = ?, gewijzigd_op = ? WHERE id = ?",
+      [totExcl, totBtw, totExcl + totBtw, origineel, koers, new Date().toISOString(), id],
+    );
+    audit(ctx.db, gebruiker, "omgerekend", "inkoopfacturen", id, { valuta: f.valuta, bedrag_valuta: origineel, bedrag_eur: doelCenten, koers });
   });
 }

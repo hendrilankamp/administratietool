@@ -52,6 +52,48 @@
         <div><label for="fd">Factuurdatum</label><input id="fd" type="date" name="factuurdatum" value="<%= f.factuurdatum || '' %>"></div>
         <div><label for="vd">Vervaldatum</label><input id="vd" type="date" name="vervaldatum" value="<%= f.vervaldatum || '' %>"></div>
       </div>
+      <div class="rij mt1">
+        <div class="smal">
+          <label for="val">Valuta</label>
+          <input id="val" name="valuta" value="<%= f.valuta %>" maxlength="3" list="valutas" style="text-transform:uppercase" <%= geboekt ? 'readonly' : '' %>>
+          <datalist id="valutas"><option value="EUR"><option value="USD"><option value="GBP"><option value="CHF"><option value="SEK"><option value="DKK"><option value="NOK"><option value="CAD"><option value="AUD"></datalist>
+        </div>
+        <div class="hulp" style="align-self:end">
+          <% if (f.valuta === 'EUR') { %>Factuur in een andere valuta? Zet hier bv. USD en klik op Opslaan als concept; daarna kun je omrekenen.
+          <% } else if (f.wisselkoers) { %>Origineel <%= f.valuta %> <%= formatBedrag(f.bedrag_valuta) %> · koers <%= Number(f.wisselkoers).toFixed(5) %> → regels hieronder staan in euro's.
+          <% } %>
+        </div>
+      </div>
+      <% if (f.valuta !== 'EUR' && !geboekt) { %>
+        <div class="melding <%= f.wisselkoers ? 'info' : 'let' %>">
+          <% if (f.wisselkoers) { %>
+            <strong>Omgerekend naar euro's</strong> (<%= f.valuta %> <%= formatBedrag(f.bedrag_valuta) %> → <%= euro(f.totaal_incl) %>, koers <%= Number(f.wisselkoers).toFixed(5) %>). Opnieuw omrekenen kan hieronder.
+          <% } else { %>
+            <strong>Deze factuur is in <%= f.valuta %>.</strong> De bedragen in de regels staan nog in <%= f.valuta %>. Vul het bedrag in euro's in zoals het van de rekening is afgegaan (of de koers) en klik op Omrekenen; de regels worden naar rato aangepast.
+          <% } %>
+          <div class="rij mt1">
+            <div class="smal"><label for="beur">Afgeschreven bedrag in euro's (incl. BTW)</label><input id="beur" name="bedrag_eur" inputmode="decimal" placeholder="bv. 92,10"></div>
+            <div class="smal"><label for="koers">of koers (€ per 1 <%= f.valuta %>)</label><input id="koers" name="koers" inputmode="decimal" placeholder="bv. 0,9210"></div>
+            <div class="smal"><label>&nbsp;</label><button type="submit" name="actie" value="omrekenen">Omrekenen</button></div>
+          </div>
+        </div>
+      <% } %>
+      <% if (afschrijvingen.length) { %>
+        <div class="melding info">
+          <strong>Mogelijk afgeschreven van de bank:</strong>
+          <ul>
+            <% afschrijvingen.forEach(a => { const t = a.transactie; %>
+              <li><a href="/bank/transacties/<%= t.id %>"><%= nlDatum(t.boekdatum) %> – <%= t.tegenpartij_naam || '' %></a>: <strong><%= euro(t.bedrag) %></strong>
+                <span class="klein">(<%= a.redenen.join(' · ') %>)</span>
+                <% if (f.valuta !== 'EUR' && !f.wisselkoers && !geboekt && f.totaal_incl !== 0) { %>
+                  <button class="klein" type="submit" name="actie" value="omrekenen_<%= Math.abs(t.bedrag) %>">Reken om naar <%= euro(-t.bedrag) %></button>
+                <% } %>
+              </li>
+            <% }) %>
+          </ul>
+          <span class="klein"><%= geboekt ? 'Koppel de afschrijving via de transactie of onder Afletteren.' : 'Na het boeken stelt Afletteren deze koppeling voor.' %></span>
+        </div>
+      <% } %>
       <div class="veld mt1"><label for="om">Omschrijving</label><input id="om" name="omschrijving" value="<%= f.omschrijving || '' %>"></div>
 
       <h3>Regels</h3>
