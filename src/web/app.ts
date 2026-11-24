@@ -15,6 +15,7 @@ import { verkoopRouter } from "./routes/verkoop.ts";
 import { relatiesRouter } from "./routes/relaties.ts";
 import { bijlagenRouter } from "./routes/bijlagen.ts";
 import { bankRouter } from "./routes/bank.ts";
+import { ritRouter } from "./routes/ritten.ts";
 import { importRouter } from "./routes/import.ts";
 import { btwRouter, dashboardRouter, instellingenRouter, rapportagesRouter } from "./routes/overig.ts";
 
@@ -76,6 +77,7 @@ export function maakApp(ctx: Ctx, diensten: Diensten): express.Express {
   app.use("/bijlagen", bijlagenRouter(ctx));
   app.use("/bank", bankRouter(ctx));
   app.use("/import", importRouter(ctx));
+  app.use("/ritten", ritRouter(ctx));
   app.use("/btw", btwRouter(ctx));
   app.use("/rapportages", rapportagesRouter(ctx));
   app.use("/instellingen", instellingenRouter(ctx, diensten));

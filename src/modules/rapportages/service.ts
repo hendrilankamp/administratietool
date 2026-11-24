@@ -6,6 +6,7 @@ import { overlapFractie } from "../../lib/datum.ts";
 import { bijlageBestandsnaamOpSchijf } from "../../lib/bijlagen.ts";
 import { ZipSchrijver } from "../../backup/zip.ts";
 import { berekenAangifte } from "../btw/service.ts";
+import { ritTotaal } from "../ritten/service.ts";
 import { factuurLijst } from "../facturen/service.ts";
 
 export interface WvRegel {
@@ -66,6 +67,10 @@ export function winstEnVerlies(ctx: Ctx, van: string, tot: string): WinstEnVerli
     else if (r.soort === "omzet") tel(r.categorie_id, r.naam, "omzet", r.rest);
     else tel(r.categorie_id, r.naam, "neutraal", r.rest);
   }
+
+  // Kilometervergoeding privéauto (km x tarief, zonder BTW)
+  const km = ritTotaal(ctx, van, tot);
+  if (km.bedrag !== 0) tel(-1, `Kilometervergoeding privéauto (${km.kilometers} km)`, "kosten", km.bedrag);
 
   const lijst = (soort: string) => [...per.values()].filter((r) => r.soort === soort && r.bedrag !== 0).sort((a, b) => b.bedrag - a.bedrag).map(({ soort: _, ...r }) => r);
   const omzet = lijst("omzet");
@@ -160,6 +165,11 @@ export async function exportAccountant(ctx: Ctx, jaar: number): Promise<string> 
                  LEFT JOIN verkoopfacturen v ON v.id = k.verkoopfactuur_id LEFT JOIN inkoopfacturen i ON i.id = k.inkoopfactuur_id WHERE k.transactie_id = t.id) AS gekoppelde_facturen
        FROM banktransacties t JOIN bankrekeningen b ON b.id = t.rekening_id LEFT JOIN categorieen c ON c.id = t.categorie_id
        WHERE t.boekdatum BETWEEN ? AND ? ORDER BY t.boekdatum, t.id`),
+  );
+  csv(
+    "ritten.csv",
+    q(`SELECT t.datum, t.van, t.naar, t.doel, r.naam AS klant, t.retour, t.kilometers, printf('%.2f', t.tarief_ct / 100.0) AS tarief_per_km, printf('%.2f', t.kilometers * t.tarief_ct / 100.0) AS vergoeding
+       FROM ritten t LEFT JOIN relaties r ON r.id = t.relatie_id WHERE t.datum BETWEEN ? AND ? ORDER BY t.datum, t.id`),
   );
   csv("relaties.csv", ctx.db.all("SELECT id, naam, type, kvk, btw_nummer, iban, email, adres, postcode, plaats, land FROM relaties ORDER BY naam"));
 

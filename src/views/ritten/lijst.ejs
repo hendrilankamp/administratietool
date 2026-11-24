@@ -1,0 +1,57 @@
+<%- include('../partials/kop') %>
+<h1>Kilometers <span class="hulp">(privéauto, zakelijk gereden)</span></h1>
+
+<form method="post" action="/ritten" class="paneel">
+  <%- include('../partials/csrf') %>
+  <h3 class="mb0">Rit toevoegen</h3>
+  <div class="rij">
+    <div class="smal"><label for="rd">Datum</label><input id="rd" type="date" name="datum" value="<%= vandaag %>" required></div>
+    <div><label for="rv">Van</label><input id="rv" name="van" placeholder="bv. Hoofddorp" required></div>
+    <div><label for="rn">Naar</label><input id="rn" name="naar" placeholder="bv. Utrecht (klant)" required></div>
+    <div class="smal"><label for="rk">Km (enkele reis)</label><input id="rk" name="kilometers" inputmode="decimal" required></div>
+    <div class="smal"><label for="rr">&nbsp;</label><label class="inline"><input id="rr" type="checkbox" name="retour" value="1" checked> heen en terug</label></div>
+  </div>
+  <div class="rij mt1">
+    <div><label for="rdoel">Zakelijk doel</label><input id="rdoel" name="doel" placeholder="bv. Overleg website-relaunch" required></div>
+    <div>
+      <label for="rrel">Klant (optioneel)</label>
+      <select id="rrel" name="relatie_id"><option value="">–</option><% klanten.forEach(k => { %><option value="<%= k.id %>"><%= k.naam %></option><% }) %></select>
+    </div>
+    <div class="smal"><label for="rt">Tarief € per km</label><input id="rt" name="tarief" value="<%= invoerBedrag(tarief) %>" inputmode="decimal"></div>
+    <div class="smal"><label>&nbsp;</label><button class="primair" type="submit">Opslaan</button></div>
+  </div>
+  <p class="hulp mb0">Bij “heen en terug” worden de kilometers verdubbeld. De vergoeding is kilometers × tarief, zonder BTW, en telt mee als kosten in Winst &amp; verlies. Het tarief wordt per rit vastgelegd (standaard € 0,25).</p>
+</form>
+
+<form method="get" class="rij">
+  <div class="smal"><label>Jaar</label><input type="number" name="jaar" value="<%= jaar %>" min="2000" max="2100"></div>
+  <div class="smal"><label>Periode</label><select name="kwartaal"><option value="">Heel jaar</option><% [1,2,3,4].forEach(k => { %><option value="<%= k %>" <%= kw === k ? 'selected' : '' %>>Q<%= k %></option><% }) %></select></div>
+  <div class="smal"><button type="submit">Toon</button></div>
+</form>
+
+<div class="paneel">
+  <strong><%= totaal.aantal %> rit(ten) · <%= totaal.kilometers %> km · vergoeding <%= euro(totaal.bedrag) %></strong>
+  <span class="hulp"> — per kwartaal: <%= perKwartaal.map(p => 'Q' + p.k + ' ' + p.kilometers + ' km (' + euro(p.bedrag) + ')').join(' · ') %></span>
+</div>
+
+<% if (!lijst.length) { %><p class="hulp">Nog geen ritten in deze periode.</p><% } else { %>
+<div class="tabel-wrap"><table>
+  <thead><tr><th>Datum</th><th>Van → naar</th><th>Doel</th><th>Klant</th><th class="bedrag">Km</th><th class="bedrag">Tarief</th><th class="bedrag">Vergoeding</th><th></th></tr></thead>
+  <tbody>
+  <% lijst.forEach(t => { %>
+    <tr>
+      <td class="nowrap"><%= nlDatum(t.datum) %></td>
+      <td><%= t.van %> → <%= t.naar %><%= t.retour ? ' (retour)' : '' %></td>
+      <td><%= t.doel %></td>
+      <td><%= t.relatie_naam || '' %></td>
+      <td class="bedrag"><%= t.kilometers %></td>
+      <td class="bedrag"><%= euro(t.tarief_ct) %></td>
+      <td class="bedrag"><%= euro(t.bedrag) %></td>
+      <td><form method="post" action="/ritten/<%= t.id %>/verwijderen" data-bevestig="Deze rit verwijderen?"><%- include('../partials/csrf') %><button class="klein gevaar" type="submit">×</button></form></td>
+    </tr>
+  <% }) %>
+  </tbody>
+  <tfoot><tr><td colspan="4">Totaal</td><td class="bedrag"><%= totaal.kilometers %></td><td></td><td class="bedrag"><%= euro(totaal.bedrag) %></td><td></td></tr></tfoot>
+</table></div>
+<% } %>
+<%- include('../partials/voet') %>
