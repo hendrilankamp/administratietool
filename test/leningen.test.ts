@@ -22,7 +22,7 @@ test("lening privé: stortingen, aflossingen via bank en handmatig, restschuld, 
     assert.equal(lening.openstaand, 450000);
     assert.equal(totaalOpenstaand(ctx), 450000);
     assert.equal(haalTransactie(ctx, aflossing)!.status, "geboekt_zonder_factuur");
-    assert.throws(() => boekTransactieOpLening(ctx, aflossing, l, "test"), /al afgehandeld/);
+    assert.throws(() => boekTransactieOpLening(ctx, aflossing, l, "test"), /al op een lening/);
     // Geen invloed op winst en verlies (neutraal)
     assert.equal(winstEnVerlies(ctx, "2026-01-01", "2026-12-31").totaalKosten, 0);
     // Bankboeking kun je niet handmatig wissen; ontkoppelen haalt hem weg
@@ -31,6 +31,27 @@ test("lening privé: stortingen, aflossingen via bank en handmatig, restschuld, 
     ontkoppel(ctx, aflossing, "test");
     assert.equal(haalLening(ctx, l)!.openstaand, 600000);
     assert.equal(transacties(ctx, { status: "open" }).length, 1);
+  } finally {
+    ctx.opruimen();
+  }
+});
+
+test("transactie met categorie 'Lening privé' zonder lening: verschijnt als los en kan alsnog aan de lening", async () => {
+  const { losseLeningTransacties, LENING_CATEGORIE } = await import("../src/modules/leningen/service.ts");
+  const { boekZonderFactuur } = await import("../src/modules/bank/service.ts");
+  const ctx = await testCtx();
+  try {
+    const rek = slaRekeningOp(ctx, null, { naam: "N26", iban: "DE89 3704 0044 0532 0130 00", bank: "N26", beginsaldo: 0, begindatum: "2026-01-01" }, "test");
+    const l = slaLeningOp(ctx, { naam: "Lening privé" }, "test");
+    const tx = ctx.db.run("INSERT INTO banktransacties (rekening_id, boekdatum, bedrag, valuta, tegenpartij_naam, omschrijving, fingerprint) VALUES (?, '2026-05-01', 200000, 'EUR', 'Ik', 'storting', 'x')", [rek]).id;
+    const cat = ctx.db.get<{ id: number }>("SELECT id FROM categorieen WHERE naam = ?", [LENING_CATEGORIE])!.id;
+    boekZonderFactuur(ctx, tx, cat, null, "test");
+    assert.equal(haalLening(ctx, l)!.openstaand, 0);
+    assert.equal(losseLeningTransacties(ctx).length, 1);
+    boekTransactieOpLening(ctx, tx, l, "test");
+    assert.equal(haalLening(ctx, l)!.openstaand, 200000);
+    assert.equal(losseLeningTransacties(ctx).length, 0);
+    assert.throws(() => boekTransactieOpLening(ctx, tx, l, "test"), /al op een lening/);
   } finally {
     ctx.opruimen();
   }

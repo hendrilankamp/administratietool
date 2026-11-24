@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { boekTransactieOpLening, LENING_CATEGORIE, leningen } from "../../modules/leningen/service.ts";
 import type { Ctx } from "../../lib/context.ts";
 import { GebruikersFout } from "../../lib/context.ts";
 import { sha256 } from "../../lib/crypto.ts";
@@ -100,6 +101,8 @@ export function bankRouter(ctx: Ctx): Router {
       voorstellen: voorstellen(ctx, t).map((v) => ({ ...v, sleutel: voorstelSleutel(v) })),
       posten,
       categorieen: categorieen(ctx),
+      leningen: leningen(ctx).filter((l) => !l.afgesloten),
+      lening: ctx.db.get<{ lening_id: number; naam: string }>("SELECT b.lening_id, l.naam FROM lening_boekingen b JOIN leningen l ON l.id = b.lening_id WHERE b.transactie_id = ?", [t.id]) ?? null,
       zoek,
     });
   });
@@ -133,10 +136,24 @@ export function bankRouter(ctx: Ctx): Router {
     klaar(ctx, req, res, `/bank/transacties/${id}`, "Gekoppeld.");
   });
 
+  r.post("/transacties/:id/lening", (req, res) => {
+    const id = idParam(req.params.id);
+    boekTransactieOpLening(ctx, id, idParam(req.body.lening_id), gebruiker(req));
+    klaar(ctx, req, res, `/bank/transacties/${id}`, "Op de lening geboekt.");
+  });
+
   r.post("/transacties/:id/zonder-factuur", (req, res) => {
     const id = idParam(req.params.id);
     const cat = geheel(req.body.categorie_id);
     if (!cat) throw new GebruikersFout("Kies een categorie");
+    // Categorie 'Lening privé' moet aan een lening hangen, anders komt hij niet in het leningenoverzicht
+    if (cat === categorieen(ctx).find((c) => c.naam === LENING_CATEGORIE)?.id) {
+      const actief = leningen(ctx).filter((l) => !l.afgesloten);
+      const kies = geheel(req.body.lening_id) ?? (actief.length === 1 ? actief[0].id : null);
+      if (!kies) throw new GebruikersFout("Kies bij 'Boek op lening' om welke lening het gaat (maak hem eerst aan onder Leningen privé).");
+      boekTransactieOpLening(ctx, id, kies, gebruiker(req));
+      return klaar(ctx, req, res, req.body.terug === "afletteren" ? "/bank/afletteren" : `/bank/transacties/${id}`, "Op de lening geboekt.");
+    }
     boekZonderFactuur(ctx, id, cat, tekst(req.body.notitie, 500), gebruiker(req));
     if (req.body.regel_maken === "1") {
       const t = haalTransactie(ctx, id)!;

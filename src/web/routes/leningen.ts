@@ -3,7 +3,7 @@ import type { Ctx } from "../../lib/context.ts";
 import { GebruikersFout } from "../../lib/context.ts";
 import { vandaag } from "../../lib/datum.ts";
 import { transacties } from "../../modules/bank/service.ts";
-import { boekingen, boekTransactieOpLening, haalLening, leningen, slaLeningOp, totaalOpenstaand, verwijderBoeking, verwijderLening, voegBoekingToe, zetAfgesloten } from "../../modules/leningen/service.ts";
+import { boekingen, boekTransactieOpLening, haalLening, leningen, losseLeningTransacties, slaLeningOp, totaalOpenstaand, verwijderBoeking, verwijderLening, voegBoekingToe, zetAfgesloten } from "../../modules/leningen/service.ts";
 import { bedrag, datum, idParam, klaar, render, tekst } from "../render.ts";
 
 export function leningenRouter(ctx: Ctx): Router {
@@ -11,7 +11,7 @@ export function leningenRouter(ctx: Ctx): Router {
   const gebruiker = (req: Express.Request) => req.sessie!.gebruikersnaam!;
 
   r.get("/", (req, res) => {
-    render(ctx, req, res, "leningen/lijst", { titel: "Leningen", lijst: leningen(ctx), totaal: totaalOpenstaand(ctx), vandaag: vandaag() });
+    render(ctx, req, res, "leningen/lijst", { titel: "Leningen", lijst: leningen(ctx), totaal: totaalOpenstaand(ctx), vandaag: vandaag(), losse: losseLeningTransacties(ctx) });
   });
 
   r.post("/", (req, res) => {

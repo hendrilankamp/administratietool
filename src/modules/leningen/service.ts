@@ -99,10 +99,13 @@ export function boekTransactieOpLening(ctx: Ctx, transactieId: number, leningId:
   if (!l) throw new GebruikersFout("Lening niet gevonden", 404);
   const t = ctx.db.get<{ id: number; boekdatum: string; bedrag: number; tegenpartij_naam: string | null; omschrijving: string | null; status: string }>("SELECT * FROM banktransacties WHERE id = ?", [transactieId]);
   if (!t) throw new GebruikersFout("Transactie niet gevonden", 404);
-  if (t.status !== "open") throw new GebruikersFout("Deze transactie is al afgehandeld; ontkoppel hem eerst");
-  if (ctx.db.get("SELECT 1 FROM transactie_koppelingen WHERE transactie_id = ?", [transactieId])) throw new GebruikersFout("Deze transactie is al aan een factuur gekoppeld");
   const cat = ctx.db.get<{ id: number }>("SELECT id FROM categorieen WHERE naam = ?", [LENING_CATEGORIE]);
   if (!cat) throw new GebruikersFout("Categorie voor leningen ontbreekt");
+  if (ctx.db.get("SELECT 1 FROM lening_boekingen WHERE transactie_id = ?", [transactieId])) throw new GebruikersFout("Deze transactie staat al op een lening");
+  if (ctx.db.get("SELECT 1 FROM transactie_koppelingen WHERE transactie_id = ?", [transactieId])) throw new GebruikersFout("Deze transactie is al aan een factuur gekoppeld");
+  // Al als 'lening' gecategoriseerd (zonder lening gekoppeld): alleen de boeking toevoegen
+  const alLening = (t as { categorie_id?: number | null }).categorie_id === cat.id;
+  if (t.status !== "open" && !alLening) throw new GebruikersFout("Deze transactie is al afgehandeld; ontkoppel hem eerst");
   ctx.db.tx(() => {
     ctx.db.run("INSERT INTO lening_boekingen (lening_id, datum, omschrijving, bedrag, transactie_id) VALUES (?, ?, ?, ?, ?)", [
       leningId,
@@ -111,9 +114,19 @@ export function boekTransactieOpLening(ctx: Ctx, transactieId: number, leningId:
       t.bedrag,
       transactieId,
     ]);
-    boekZonderFactuur(ctx, transactieId, cat.id, `Lening: ${l.naam}`, gebruiker);
+    if (!alLening) boekZonderFactuur(ctx, transactieId, cat.id, `Lening: ${l.naam}`, gebruiker);
     audit(ctx.db, gebruiker, "transactie_op_lening", "leningen", leningId, { transactieId, bedrag: t.bedrag });
   });
+}
+
+/** Transacties die als 'Lening privé' zijn geboekt, maar nog niet aan een lening hangen (bv. via 'Boeken zonder factuur'). */
+export function losseLeningTransacties(ctx: Ctx) {
+  return ctx.db.all<{ id: number; boekdatum: string; bedrag: number; tegenpartij_naam: string | null; omschrijving: string | null }>(
+    `SELECT t.id, t.boekdatum, t.bedrag, t.tegenpartij_naam, t.omschrijving FROM banktransacties t
+     JOIN categorieen c ON c.id = t.categorie_id AND c.naam = ?
+     WHERE NOT EXISTS (SELECT 1 FROM lening_boekingen b WHERE b.transactie_id = t.id) ORDER BY t.boekdatum DESC`,
+    [LENING_CATEGORIE],
+  );
 }
 
 export function zetAfgesloten(ctx: Ctx, id: number, afgesloten: boolean, gebruiker: string): void {

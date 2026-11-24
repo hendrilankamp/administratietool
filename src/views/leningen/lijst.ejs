@@ -3,6 +3,19 @@
 <div class="paneel"><strong>Nog af te lossen aan privé: <%= euro(totaal) %></strong>
   <p class="hulp mb0">Stortingen vanuit privé verhogen de schuld, aflossingen verlagen hem. Geboekt via de bank (Afletteren) of handmatig. De rente is alleen ter info en wordt niet meegerekend.</p></div>
 
+<% if (losse.length) { %>
+  <div class="melding let">
+    <strong>Deze banktransacties staan als "Lening privé" geboekt, maar hangen nog niet aan een lening</strong> en tellen daarom niet mee:
+    <% losse.forEach(t => { %>
+      <form method="post" action="/leningen/<%= lijst.length ? lijst.find(l => !l.afgesloten)?.id ?? lijst[0].id : 0 %>/transactie" class="rij mt1">
+        <%- include('../partials/csrf') %><input type="hidden" name="transactie_id" value="<%= t.id %>">
+        <div><%= nlDatum(t.boekdatum) %> – <strong><%= t.tegenpartij_naam || '' %></strong> <%= euro(t.bedrag) %><br><span class="klein"><%= (t.omschrijving || '').slice(0, 100) %></span></div>
+        <% if (lijst.length) { %><div class="smal"><button class="klein" type="submit">Boek op "<%= (lijst.find(l => !l.afgesloten) || lijst[0]).naam %>"</button></div><% } else { %><div class="hulp">Maak eerst hieronder een lening aan.</div><% } %>
+      </form>
+    <% }) %>
+    <span class="klein">Staat er meer dan één lening? Open de transactie en kies daar de juiste lening.</span>
+  </div>
+<% } %>
 <% if (!lijst.length) { %><p class="hulp">Nog geen leningen. Maak er hieronder één aan.</p><% } else { %>
 <div class="tabel-wrap"><table>
   <thead><tr><th>Lening</th><th>Start</th><th class="bedrag">Geleend</th><th class="bedrag">Afgelost</th><th class="bedrag">Nog af te lossen</th></tr></thead>

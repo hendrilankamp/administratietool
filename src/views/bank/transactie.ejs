@@ -24,6 +24,7 @@
   </div>
 <% } %>
 
+<% if (lening) { %><div class="paneel">Geboekt op lening <a href="/leningen/<%= lening.lening_id %>"><strong><%= lening.naam %></strong></a> (<%= t.bedrag > 0 ? 'storting' : 'aflossing' %>).</div><% } %>
 <% if (t.status === 'open' || (rest !== 0 && !t.categorie_id)) { %>
   <% if (voorstellen.length) { %>
     <div class="paneel">
@@ -68,12 +69,24 @@
     <p class="hulp">Leeg bedrag = het openstaande bedrag (of het restant van de transactie). Een deelbetaling vul je zelf in.</p>
   </div>
 
+  <% if (leningen.length) { %>
+  <div class="paneel">
+    <h3 class="mb0">Boeken op een lening (privé)</h3>
+    <p class="hulp">Bijschrijving = storting vanuit privé, afschrijving = aflossing aan privé. Komt terug onder Leningen privé.</p>
+    <form method="post" action="/bank/transacties/<%= t.id %>/lening" class="rij">
+      <%- include('../partials/csrf') %>
+      <div><select name="lening_id" required><% leningen.forEach(l => { %><option value="<%= l.id %>"><%= l.naam %></option><% }) %></select></div>
+      <div class="smal"><button type="submit"><%= t.bedrag > 0 ? 'Boek als storting' : 'Boek als aflossing' %></button></div>
+    </form>
+  </div>
+  <% } %>
+
   <div class="paneel">
     <h3 class="mb0">Boeken zonder factuur</h3>
     <p class="hulp">Voor bankkosten, privé-opnames/stortingen, belastingbetalingen of overboekingen tussen eigen rekeningen.<% if (t.koppelingen.length) { %> Het restant van <%= euro(rest) %> wordt op de categorie geboekt.<% } %></p>
     <form method="post" action="/bank/transacties/<%= t.id %>/zonder-factuur" class="rij">
       <%- include('../partials/csrf') %>
-      <div><label>Categorie</label><select name="categorie_id" required><option value="">– kies –</option><% categorieen.forEach(c => { %><option value="<%= c.id %>"><%= c.naam %></option><% }) %></select></div>
+      <div><label>Categorie</label><select name="categorie_id" required><option value="">– kies –</option><% categorieen.filter(c => !c.naam.startsWith('Lening privé')).forEach(c => { %><option value="<%= c.id %>"><%= c.naam %></option><% }) %></select></div>
       <div><label>Notitie</label><input name="notitie" maxlength="500"></div>
       <div class="smal"><label><input type="checkbox" name="regel_maken" value="1"> Onthoud als bankregel</label></div>
       <div class="smal"><button type="submit">Boeken</button></div>
